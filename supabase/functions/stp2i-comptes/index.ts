@@ -15,8 +15,14 @@ const ROLES = ["admin", "base", "logistique", "dg"];
 function rep(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
+// "Rodrigue Tchibinda" → "rodrigue.tchibinda" ; une adresse e-mail est gardée telle quelle.
+function nettoyer(identifiant: string) {
+  const id = identifiant.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (id.includes("@")) return id.replace(/\s+/g, "");
+  return id.replace(/\s+/g, ".").replace(/[^a-z0-9._-]/g, "").replace(/\.+/g, ".").replace(/^\.|\.$/g, "");
+}
 function emailDe(identifiant: string) {
-  const id = identifiant.trim().toLowerCase();
+  const id = nettoyer(identifiant);
   return id.includes("@") ? id : `${id}@stp2i.app`;
 }
 
@@ -53,7 +59,7 @@ Deno.serve(async (req) => {
   if (action === "mot_de_passe") {
     const cible = String(b.id ?? "");
     const mdp = String(b.mot_de_passe ?? "");
-    if (mdp.length < 8) return rep(400, { erreur: "Mot de passe : 8 caractères minimum" });
+    if (mdp.length < 6) return rep(400, { erreur: "Le mot de passe doit faire au moins 6 caractères" });
     const { data: p } = await service.from("stp2i_profils").select("id, nom").eq("id", cible).maybeSingle();
     if (!p) return rep(404, { erreur: "Compte STP2i introuvable" });
     const { error } = await service.auth.admin.updateUserById(cible, { password: mdp });
@@ -67,19 +73,19 @@ Deno.serve(async (req) => {
 
 // deno-lint-ignore no-explicit-any
 async function creer(service: any, b: Record<string, unknown>, role: string, par?: string) {
-  const identifiant = String(b.identifiant ?? "").trim();
+  const identifiant = nettoyer(String(b.identifiant ?? ""));
   const mdp = String(b.mot_de_passe ?? "");
-  const nom = String(b.nom ?? "").trim();
-  if (!identifiant || !nom) return rep(400, { erreur: "Identifiant et nom obligatoires" });
-  if (!/^[a-z0-9._@-]+$/i.test(identifiant)) return rep(400, { erreur: "Identifiant : lettres, chiffres, point ou tiret, sans espace" });
-  if (mdp.length < 8) return rep(400, { erreur: "Mot de passe : 8 caractères minimum" });
+  const nom = String(b.nom ?? "").trim() || identifiant;
+  console.log("creer", { role, identifiant, longueur_mdp: mdp.length });
+  if (!identifiant) return rep(400, { erreur: "Indiquez un identifiant (par exemple : gloria)" });
+  if (mdp.length < 6) return rep(400, { erreur: "Le mot de passe doit faire au moins 6 caractères" });
   const email = emailDe(identifiant);
   const { data, error } = await service.auth.admin.createUser({
     email, password: mdp, email_confirm: true, user_metadata: { nom, app: "stp2i" },
   });
-  if (error) return rep(400, { erreur: error.message.includes("already") ? "Cet identifiant existe déjà" : error.message });
+  if (error) { console.log("createUser", error.message); return rep(400, { erreur: error.message.includes("already") ? "Cet identifiant existe déjà, choisissez-en un autre" : error.message }); }
   const { error: e2 } = await service.from("stp2i_profils").insert({ id: data.user.id, nom, email, role, actif: true });
   if (e2) return rep(400, { erreur: e2.message });
   await service.from("stp2i_journal").insert({ par: par ?? data.user.id, role: "admin", action: `Compte créé : ${nom} (${role})`, ref: identifiant });
-  return rep(200, { ok: true, email });
+  return rep(200, { ok: true, email, identifiant: email.endsWith("@stp2i.app") ? identifiant : email });
 }

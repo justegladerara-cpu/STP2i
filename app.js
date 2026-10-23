@@ -77,7 +77,11 @@ async function fonction(body){
   if(data&&data.erreur) throw new Error(data.erreur);
   return data;
 }
-const emailDe=id=>{id=String(id||"").trim().toLowerCase();return id.includes("@")?id:id+"@"+CFG.domaine};
+// Même règle que le serveur : "Rodrigue Tchibinda" → "rodrigue.tchibinda@stp2i.app".
+const nettoyer=id=>{id=String(id||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  if(id.includes("@")) return id.replace(/\s+/g,"");
+  return id.replace(/\s+/g,".").replace(/[^a-z0-9._-]/g,"").replace(/\.+/g,".").replace(/^\.|\.$/g,"")};
+const emailDe=id=>{id=nettoyer(id);return id.includes("@")?id:id+"@"+CFG.domaine};
 
 async function shrink(file){
   try{const img=await createImageBitmap(file);const k=Math.min(1,1600/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);return await new Promise(r=>c.toBlob(b=>r(b||file),"image/jpeg",0.8));}catch(e){return file}
@@ -217,7 +221,7 @@ function vSetup(){
    <p>Aucun administrateur n'existe encore. Créez le compte administrateur : il servira à créer les comptes du chef de base, de la logistique et du DG.</p>
    <div class="f"><label for="su-nom">Nom complet</label><input id="su-nom"></div>
    <div class="f"><label for="su-id">Identifiant</label><input id="su-id" autocapitalize="none" placeholder="ex. admin"></div>
-   <div class="f"><label for="su-pw">Mot de passe (8 caractères minimum)</label><input id="su-pw" type="password" autocomplete="new-password"></div>
+   <div class="f"><label for="su-pw">Mot de passe (6 caractères minimum)</label><input id="su-pw" type="password" autocomplete="new-password"></div>
    ${F.err?`<div class="err">${esc(F.err)}</div>`:""}
    <button class="send" type="submit" ${F.busy?"disabled":""}>${F.busy?"Création…":"Créer l'administrateur"}</button></div></form>`;
 }
@@ -516,11 +520,11 @@ H["cpt-new"]=()=>openDlg("Créer un compte",`
   <div class="f"><label for="c-nom">Nom complet</label><input id="c-nom" placeholder="ex. VOUMISSA Gloria"></div>
   <div class="grid2"><div class="f"><label for="c-id">Identifiant</label><input id="c-id" autocapitalize="none" placeholder="ex. gloria"></div>
   <div class="f"><label for="c-role">Rôle</label><select id="c-role">${["base","logistique","dg","admin"].map(k=>`<option value="${k}">${ROLES[k]}</option>`).join("")}</select></div></div>
-  <div class="f"><label for="c-pw">Mot de passe (8 caractères minimum)</label><input id="c-pw" autocomplete="new-password"></div>
+  <div class="f"><label for="c-pw">Mot de passe (6 caractères minimum)</label><input id="c-pw" autocomplete="new-password"></div>
   <p class="sub">Communiquez l'identifiant et le mot de passe à la personne en main propre.</p>`,"Créer le compte",async()=>{
   const r=await fonction({action:"creer",nom:val("c-nom"),identifiant:val("c-id"),mot_de_passe:$("#c-pw").value,role:val("c-role")});
-  toast("Compte créé : "+r.email)});
-H["cpt-mdp"]=dd=>{const p=byId("profils",dd.id);openDlg("Nouveau mot de passe pour "+(p.nom||p.email),`<div class="f"><label for="m-pw">Nouveau mot de passe (8 caractères minimum)</label><input id="m-pw" autocomplete="new-password"></div>`,"Enregistrer",async()=>{
+  openDlg("Compte créé",`<p>Donnez ces informations à la personne :</p><p>Identifiant : <b>${esc(r.identifiant||r.email)}</b></p><p class="sub">Le mot de passe est celui que vous venez de choisir.</p>`,null,null);charger();return false});
+H["cpt-mdp"]=dd=>{const p=byId("profils",dd.id);openDlg("Nouveau mot de passe pour "+(p.nom||p.email),`<div class="f"><label for="m-pw">Nouveau mot de passe (6 caractères minimum)</label><input id="m-pw" autocomplete="new-password"></div>`,"Enregistrer",async()=>{
   await fonction({action:"mot_de_passe",id:p.id,mot_de_passe:$("#m-pw").value});toast("Mot de passe changé")})};
 H["cpt-actif"]=async dd=>{const p=byId("profils",dd.id);try{await rpc("stp2i_definir_role",{p_user:p.id,p_role:p.role,p_actif:dd.v==="1"});toast(dd.v==="1"?"Compte réactivé":"Compte désactivé");charger()}catch(e){toast(errMsg(e))}};
 
