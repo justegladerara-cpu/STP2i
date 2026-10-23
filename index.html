@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>STP2i Achats et Parc</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="wrap hrow">
+    <div class="logo"><img alt="STP2I" src="assets/logo.png"></div>
+    <div class="apptitle">Achats et Parc<small>Demandes de pièces, commandes, factures</small></div>
+    <div class="who" id="who"></div>
+  </div>
+  <div class="wrap"><nav id="tabs" role="tablist"></nav></div>
+</header>
+<main class="wrap" id="main"><div class="empty">Chargement…</div></main>
+<dialog id="dlg"><form id="dlgform" method="dialog" novalidate><div class="dh"><h2 id="dlgt"></h2></div><div class="db" id="dlgb"></div><div class="df" id="dlgf"></div></form></dialog>
+<dialog id="lightbox"><div class="dh row"><h2 class="grow">Document</h2><a id="lbopen" class="btn sm" target="_blank" rel="noopener">Ouvrir</a><button class="btn sm" data-act="lb-close" type="button">Fermer</button></div><div class="db" id="lbb"></div></dialog>
+<div class="toast" id="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
