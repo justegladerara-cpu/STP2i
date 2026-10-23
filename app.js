@@ -214,7 +214,7 @@ function vLogin(){
    <div class="f"><label for="lg-pw">Mot de passe</label><input id="lg-pw" class="bigin" type="password" autocomplete="current-password"></div>
    ${F.err?`<div class="err">${esc(F.err)}</div>`:""}
    <button class="send" type="submit" ${F.busy?"disabled":""}>${F.busy?"Connexion…":"Se connecter"}</button>
-   <p class="sub">Mot de passe oublié : demandez à l'administrateur de le changer.</p></div></form>`;
+   <p class="sub">Votre identifiant vous a été remis par l'administrateur (par exemple : gloria). Mot de passe oublié : demandez-lui de le changer.</p></div></form>`;
 }
 function vSetup(){
   return `<form class="panel narrow" id="f-setup" novalidate><div class="phead"><h2>Premier démarrage</h2></div><div class="db">
@@ -444,7 +444,7 @@ const H={};
 H.tab=d=>{tab=d.k;screen="home";F={};render(true)};
 H.go=d=>{screen=d.s;F={qte:1};render(true);window.scrollTo(0,0);if(d.s==="recv")charger()};
 H.pick=d=>{if(d.k==="urgent")F.urgent=d.v==="1";else F[d.k]=d.v||null;
-  if(d.k==="bc"&&d.v){const b=S.attendues.find(x=>x.id===d.v);(b.lignes||[]).forEach((l,i)=>F["r"+i]=Math.max(0,l.qte-(l.recu||0)))}
+  if(d.k==="bc"&&d.v){const b=S.attendues.find(x=>x.id===d.v);if(!b){F.bc=null;return render(true)}(b.lignes||[]).forEach((l,i)=>F["r"+i]=Math.max(0,l.qte-(l.recu||0)))}
   if(d.k==="item"&&d.v){F.qte=1}
   F.err="";render(true)};
 H.qty=d=>{let max=99;if(screen==="mount"&&F.item){const s=byId("stock",F.item);max=s?s.qte:1}

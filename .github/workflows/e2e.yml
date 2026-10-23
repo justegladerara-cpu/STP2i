@@ -1,0 +1,20 @@
+name: Test complet du site
+on:
+  workflow_dispatch:
+    inputs:
+      admin_id:
+        description: Identifiant d'un administrateur de test
+        required: true
+      admin_pw:
+        description: Mot de passe (compte de test supprimé après)
+        required: true
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm i --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - run: node tests/e2e.js
+        env:
+          ADMIN_ID: ${{ inputs.admin_id }}
+          ADMIN_PW: ${{ inputs.admin_pw }}
