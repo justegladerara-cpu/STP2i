@@ -36,7 +36,7 @@ Chaque action est inscrite dans le journal (qui, quand, quoi). Rien ne peut êtr
 - La sécurité est assurée par la base de données, pas par la page :
   - les tables sont en lecture seule selon le rôle (RLS) ;
   - toute écriture passe par une fonction `stp2i_…` qui vérifie le rôle, applique la règle et écrit le journal.
-- `supabase/migrations/` contient le schéma, les règles et les fonctions. Les migrations sont déjà appliquées.
+- `supabase/migrations/` garde une copie du schéma, des règles et des fonctions. La base est partagée avec agence-elite-platform : tout changement de base passe par une migration dans ce dépôt-là et par le canal justegladerara-cpu/agence-elite-platform#83 (voir `CLAUDE.md`).
 - `supabase/functions/stp2i-comptes` est la fonction serveur qui crée les comptes, sans e-mail de confirmation. L'identifiant `gloria` devient `gloria@stp2i.app`.
 
 ## Mise en ligne (GitHub Pages)

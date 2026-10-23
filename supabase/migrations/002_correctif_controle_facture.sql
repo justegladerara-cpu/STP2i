@@ -1,4 +1,3 @@
--- Correctif : construction de la liste des anomalies d'une facture (array_append).
 create or replace function public.stp2i_anomalies_facture(p_commande uuid, p_numero text, p_montant numeric, p_facture uuid default null)
 returns text[] language plpgsql stable security definer set search_path = public as $$
 declare c public.stp2i_commandes; v_out text[] := '{}';
