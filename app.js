@@ -567,8 +567,7 @@ document.addEventListener("focusout",()=>{if(pending)setTimeout(()=>{if(pending)
 async function demarrer(session){
   if(!session){
     me=null;F={};tab=null;screen="home";
-    const {data:existe}=await sb.rpc("stp2i_admin_existe");
-    boot=existe===false?"setup":"login";render(true);return;
+    boot="login";render(true);return; // l'administrateur existe déjà : plus d'écran de premier démarrage
   }
   try{me=await rpc("stp2i_mon_profil")}catch(e){boot="login";F={err:errMsg(e)};render(true);return}
   boot="ready";F={};render(true);
