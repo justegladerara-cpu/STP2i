@@ -544,12 +544,17 @@ document.addEventListener("change",async e=>{const t=e.target;
     try{F[k]=await upload(file)}catch(x){F.err="La photo n'a pas pu être envoyée : "+errMsg(x)}F[k+"_busy"]=false;render(true)}
 });
 document.addEventListener("submit",async e=>{
-  if(e.target.id==="f-login"){e.preventDefault();F.busy=true;F.err="";render(true);
-    const {error}=await sb.auth.signInWithPassword({email:emailDe(val("lg-id")),password:$("#lg-pw").value});
+  // Lire les champs AVANT de redessiner l'écran (le rendu vide les champs).
+  if(e.target.id==="f-login"){e.preventDefault();
+    const email=emailDe(val("lg-id")),password=$("#lg-pw").value;
+    if(!val("lg-id")||!password){F.err="Indiquez l'identifiant et le mot de passe.";render(true);return}
+    F.busy=true;F.err="";render(true);
+    const {error}=await sb.auth.signInWithPassword({email,password});
     if(error){F.busy=false;F.err=errMsg(error);render(true)}}
-  if(e.target.id==="f-setup"){e.preventDefault();F.busy=true;F.err="";render(true);
-    const id=val("su-id"),pw=$("#su-pw").value;
-    try{await fonction({action:"premier_admin",nom:val("su-nom"),identifiant:id,mot_de_passe:pw});
+  if(e.target.id==="f-setup"){e.preventDefault();
+    const id=val("su-id"),pw=$("#su-pw").value,nom=val("su-nom");
+    F.busy=true;F.err="";render(true);
+    try{await fonction({action:"premier_admin",nom,identifiant:id,mot_de_passe:pw});
       const {error}=await sb.auth.signInWithPassword({email:emailDe(id),password:pw});if(error) throw error}
     catch(x){F.busy=false;F.err=errMsg(x);render(true)}}
 });
