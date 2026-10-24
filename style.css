@@ -196,3 +196,7 @@ table.cal .chip{padding:1px 6px;font-size:11px}
 table.cal .auj{background:rgba(31,78,158,.08)}
 table.cal .vide{color:var(--line)}
 .big-t b{font-size:18px!important}
+.vtile.t-sel{border-top-color:#1f4e9e;box-shadow:0 0 0 2px #1f4e9e inset}
+.smq-band{display:flex;align-items:center;gap:12px;justify-content:space-between;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px 16px;border-left:5px solid #0f6b6b}
+.smq-band b{display:block;font-size:16px}
+label.btn{display:inline-flex;align-items:center}

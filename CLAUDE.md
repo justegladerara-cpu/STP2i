@@ -17,5 +17,5 @@ Concrètement :
 ## Ce dépôt
 
 - Application statique publiée sur GitHub Pages (`.github/workflows/pages.yml`) : https://justegladerara-cpu.github.io/STP2i/
-- `supabase/migrations/` garde une copie des migrations STP2i. Elles sont identiques à celles d'agence-elite-platform (`20261023165501_stp2i_achats.sql`, `20261023170228_stp2i_correctif_controle_facture.sql`, `20261024070000_stp2i_parc_complet.sql`). La référence est agence-elite-platform.
+- `supabase/migrations/` garde une copie des migrations STP2i. Elles sont identiques à celles d'agence-elite-platform (`20261023165501_stp2i_achats.sql`, `20261023170228_stp2i_correctif_controle_facture.sql`, `20261024070000_stp2i_parc_complet.sql`, `20261024080000_stp2i_hse_documents.sql`). La référence est agence-elite-platform.
 - `tests/e2e.js` et `.github/workflows/e2e.yml` : test de bout en bout sur le site en ligne.

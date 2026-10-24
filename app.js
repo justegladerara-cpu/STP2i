@@ -15,7 +15,7 @@ const xaf=n=>fmt(n)+" XAF";
 const ts=t=>t?new Date(t).getTime():0;
 const dt=t=>t?new Date(t).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}):"";
 const dtt=t=>t?new Date(t).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
-const ROLES={base:"Chef de base",logistique:"Logistique",dg:"Direction générale",admin:"Administration"};
+const ROLES={base:"Chef de base",logistique:"Logistique",dg:"Direction générale",hse:"Responsable HSE",admin:"Administration"};
 const ICON={
  plus:'<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle cx="24" cy="24" r="20" stroke-width="3.5"/><path d="M24 14v20M14 24h20"/></svg>',
  box:'<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"><path d="M6 15l18-9 18 9v18l-18 9-18-9z"/><path d="M6 15l18 9 18-9M24 24v18"/></svg>',
@@ -39,7 +39,7 @@ const attChip=(t,urgent,lent)=>`<span class="chip ${attenteCls(t,urgent,lent)}" 
 
 /* ---------- État ---------- */
 const S={vehicules:[],demandes:[],commandes:[],lignes:[],receptions:[],stock:[],mouvements:[],factures:[],profils:[],journal:[],attendues:[],seuil:0,
-  affectations:[],pannes:[],entretiens:[],entretiens_faits:[],carburant:[],papiers:[],sites:[],stock_sites:[],transferts:[],inventaires:[],fournisseurs:[],jours:[],contrat_prix:[],controles:[],hse:[],formations:[]};
+  affectations:[],pannes:[],entretiens:[],entretiens_faits:[],carburant:[],papiers:[],sites:[],stock_sites:[],transferts:[],inventaires:[],fournisseurs:[],jours:[],contrat_prix:[],controles:[],hse:[],formations:[],smq:[],smq_versions:[]};
 // Lien d'un QR collé sur un camion : #camion=CE-01
 let qrCamion=(location.hash.match(/camion=([^&]+)/)||[])[1]||null; if(qrCamion) qrCamion=decodeURIComponent(qrCamion);
 let qrDoc=(location.hash.match(/doc=([^&]+)/)||[])[1]||null; if(qrDoc) qrDoc=decodeURIComponent(qrDoc);
@@ -72,6 +72,8 @@ const canDo=a=>{
   if(a==="b") return r==="base"&&(real==="base"||real==="admin");
   if(["bc","refuse","facture","recheck","veh","km"].includes(a)) return r==="logistique"&&(real==="logistique"||real==="admin");
   if(a==="admin") return real==="admin"&&r==="admin";
+  if(a==="papier") return (r==="logistique"&&(real==="logistique"||real==="admin"))||(r==="hse"&&(real==="hse"||real==="admin"));
+  if(a==="controle") return ["base","logistique","hse"].includes(r)&&(real===r||real==="admin");
   if(a==="stockop") return ["base","logistique"].includes(r)&&(real===r||real==="admin");
   if(a==="plein") return ["base","logistique"].includes(r)&&(real===r||real==="admin");
   if(a==="panne") return ["base","logistique"].includes(r)&&(real===r||real==="admin");
@@ -168,7 +170,9 @@ async function charger(){
       jours:q("stp2i_jours","*","jour").limit(3000),
       controles:q("stp2i_controles_depart","*","created_at").limit(600),
       hse:q("stp2i_hse","*","created_at"),
-      formations:q("stp2i_formations","*","created_at")
+      formations:q("stp2i_formations","*","created_at"),
+      smq:q("stp2i_smq_documents"),
+      smq_versions:q("stp2i_smq_versions","*","remplace_le")
     };
     if(direction){
       jobs.commandes=q("stp2i_commandes","*","created_at");
@@ -190,19 +194,19 @@ async function charger(){
       if(v){tab="camions";fiche=v.id;screen="home";try{history.replaceState(null,"",location.pathname)}catch(x){}}}
     syncTxt="À jour · "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
     render();
-    const paths=[...S.demandes.map(d=>d.photo),...S.commandes.map(c=>c.devis),...S.receptions.map(r=>r.photo),...S.factures.map(f=>f.fichier),...S.mouvements.map(m=>m.photo),...S.pannes.map(x=>x.photo),...S.carburant.map(x=>x.photo),...S.papiers.map(x=>x.fichier),...S.hse.map(x=>x.photo),...S.controles.map(x=>x.photo),...S.formations.map(x=>x.fichier)];
+    const paths=[...S.demandes.map(d=>d.photo),...S.commandes.map(c=>c.devis),...S.receptions.map(r=>r.photo),...S.factures.map(f=>f.fichier),...S.mouvements.map(m=>m.photo),...S.pannes.map(x=>x.photo),...S.carburant.map(x=>x.photo),...S.papiers.map(x=>x.fichier),...S.hse.map(x=>x.photo),...S.controles.map(x=>x.photo),...S.formations.map(x=>x.fichier),...S.smq.map(x=>x.fichier)];
     if(await signer(paths)) render();
   }catch(e){syncTxt="Erreur de chargement : "+errMsg(e);render()}
   finally{loading=false;if(again){again=false;charger()}}
 }
 // Tables ajoutées par la mise à jour du parc : l'écran reste utilisable si elles manquent.
-const NOUVELLES=["affectations","pannes","entretiens","entretiens_faits","carburant","papiers","sites","stock_sites","transferts","inventaires","fournisseurs","jours","contrat_prix","controles","hse","formations"];
+const NOUVELLES=["affectations","pannes","entretiens","entretiens_faits","carburant","papiers","sites","stock_sites","transferts","inventaires","fournisseurs","jours","contrat_prix","controles","hse","formations","smq","smq_versions"];
 let reloadT;const bientot=()=>{clearTimeout(reloadT);reloadT=setTimeout(charger,400)};
 let canal=null;
 function ecouter(){
   if(canal) return;
   canal=sb.channel("stp2i");
-  ["stp2i_demandes","stp2i_commandes","stp2i_receptions","stp2i_stock","stp2i_mouvements","stp2i_factures","stp2i_vehicules","stp2i_profils","stp2i_journal","stp2i_pannes","stp2i_entretiens","stp2i_affectations","stp2i_carburant","stp2i_papiers","stp2i_transferts","stp2i_stock_sites","stp2i_jours","stp2i_controles_depart","stp2i_hse"]
+  ["stp2i_demandes","stp2i_commandes","stp2i_receptions","stp2i_stock","stp2i_mouvements","stp2i_factures","stp2i_vehicules","stp2i_profils","stp2i_journal","stp2i_pannes","stp2i_entretiens","stp2i_affectations","stp2i_carburant","stp2i_papiers","stp2i_transferts","stp2i_stock_sites","stp2i_jours","stp2i_controles_depart","stp2i_hse","stp2i_smq_documents"]
     .forEach(t=>canal.on("postgres_changes",{event:"*",schema:"public",table:t},bientot));
   canal.subscribe();
   setInterval(charger,120000); // filet de sécurité si le temps réel est coupé
@@ -224,16 +228,17 @@ function render(force){
   if(!r){m.innerHTML=`<div class="panel narrow"><div class="phead"><h2>Accès en attente</h2></div><div class="db"><p>Bonjour ${esc(me.nom||"")}. Votre compte existe, mais aucun rôle ne vous a encore été attribué.</p><p class="sub">Demandez à l'administrateur de vous donner un rôle : Chef de base, Logistique ou Direction générale.</p><div><button class="btn" data-act="logout">Se déconnecter</button></div></div></div>`;return}
   const T=tabsFor(r);
   if(!T.find(x=>x[0]===tab)) tab=T[0][0];
-  const VIEWS={base:vBase,demandes:vDemandes,commandes:vCommandes,factures:vFactures,stock:vStock,camions:vCamions,journal:vJournal,valider:vValider,params:vParams,bord:vBord,carburant:vCarburant,papiers:vPapiers,fournisseurs:vFournisseurs,contrat:vContrat,hse:vHse,rapports:vRapports};
+  const VIEWS={base:vBase,demandes:vDemandes,commandes:vCommandes,factures:vFactures,stock:vStock,camions:vCamions,journal:vJournal,valider:vValider,params:vParams,bord:vBord,carburant:vCarburant,papiers:vPapiers,fournisseurs:vFournisseurs,contrat:vContrat,hse:vHse,rapports:vRapports,smq:vSmq};
   m.innerHTML=VIEWS[tab]();
 }
 function tabsFor(r){
   const nD=S.demandes.filter(d=>d.statut==="Nouvelle").length, nV=S.commandes.filter(b=>b.statut==="À valider").length,
         nF=S.factures.filter(f=>f.statut==="Bloquée").length, nP=S.factures.filter(f=>f.statut==="Conforme").length;
   return ({
-    base:[["base","Accueil"],["camions","Camions"],["stock","Stock",S.transferts.filter(t=>t.statut==="En route"&&t.envoye_par!==me.id).length],["hse","HSE"]],
-    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["fournisseurs","Fournisseurs"],["camions","Camions"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["rapports","Rapports"],["journal","Journal"]],
-    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["stock","Stock"],["camions","Camions"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["rapports","Rapports"],["journal","Journal"]],
+    base:[["base","Accueil"],["camions","Camions"],["stock","Stock",S.transferts.filter(t=>t.statut==="En route"&&t.envoye_par!==me.id).length],["hse","HSE"],["smq","Documents HSE"]],
+    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["fournisseurs","Fournisseurs"],["camions","Camions"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
+    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["stock","Stock"],["camions","Camions"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
+    hse:[["hse","Accueil HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents",smqARevoir().length],["papiers","Papiers",papiersAlerte().length],["camions","Camions"],["rapports","Rapports"],["journal","Journal"]],
     admin:[["params","Comptes et réglages"],["bord","Tableau de bord"],["journal","Journal"]]
   })[r];
 }
@@ -241,7 +246,7 @@ function renderHeader(){
   let h="";
   if(boot==="ready"&&me){
     h+=`<span id="sync">${esc(syncTxt)}</span><span>${esc(me.nom||"")}</span>`;
-    if(me.role==="admin") h+=`<select id="viewas" aria-label="Écran affiché" style="width:auto">${["admin","base","logistique","dg"].map(k=>`<option value="${k}"${k===viewAs?" selected":""}>${k==="admin"?"Administration":"Écran : "+ROLES[k]}</option>`).join("")}</select>`;
+    if(me.role==="admin") h+=`<select id="viewas" aria-label="Écran affiché" style="width:auto">${["admin","base","logistique","dg","hse"].map(k=>`<option value="${k}"${k===viewAs?" selected":""}>${k==="admin"?"Administration":"Écran : "+ROLES[k]}</option>`).join("")}</select>`;
     else if(me.role) h+=`<span class="role">${esc(ROLES[me.role])}</span>`;
     h+=`<button class="btn sm" data-act="logout">Déconnexion</button>`;
   }
@@ -521,7 +526,7 @@ function vFiche(){
    <div class="panel"><div class="phead"><h2 class="grow">Entretien</h2>${canDo("veh")?`<button class="btn sm primary" data-act="ent-new" data-id="${v.id}">Programmer un entretien</button>`:""}</div>
     ${tbl(["Entretien","Tous les","Dernier","Prochain",""],ents.map(e=>{const x=entEtat(e);return `<tr><td><b>${esc(e.type)}</b></td><td>${[e.tous_km?fmt(e.tous_km)+" km":"",e.tous_jours?e.tous_jours+" jours":""].filter(Boolean).join(" ou ")}</td><td>${[e.dernier_km!=null?fmt(e.dernier_km)+" km":"",e.dernier_le?dt(e.dernier_le):""].filter(Boolean).join(" · ")||"—"}</td><td><span class="chip ${x.c}">${esc(x.t)}</span></td><td class="num">${canDo("panne")||canDo("veh")?`<button class="btn sm ok" data-act="ent-fait" data-id="${e.id}">C'est fait</button>`:""}</td></tr>`}),"Aucun entretien programmé. Exemple : vidange tous les 10 000 km ou 6 mois.")}
     ${faits.length?`<div class="db"><div class="hist">${faits.slice(0,10).map(f=>{const e=S.entretiens.find(x=>x.id===f.entretien_id);return `<div>${dt(f.fait_le)} · ${esc(e?e.type:"")}${f.km?" · "+fmt(f.km)+" km":""} · ${esc(who(f.created_by))}${f.note?" · "+esc(f.note):""}</div>`}).join("")}</div></div>`:""}</div>
-   <div class="panel"><div class="phead"><h2 class="grow">Papiers</h2>${canDo("veh")?`<button class="btn sm primary" data-act="papier-new" data-v="${v.id}">Ajouter un papier</button>`:""}</div>${tbl(["Papier","N°","Fin","État","Fichier"],papiersActuels().filter(p=>p.vehicule_id===v.id).sort((a,b)=>ts(a.date_fin)-ts(b.date_fin)).map(p=>{const e=papierEtat(p);return `<tr><td><b>${esc(p.type)}</b></td><td>${esc(p.numero)}</td><td>${dt(p.date_fin)}</td><td><span class="chip ${e.c}">${esc(e.t)}</span></td><td>${thumb(p.fichier,p.type)}</td></tr>`}),"Aucun papier enregistré pour ce camion.")}</div>
+   <div class="panel"><div class="phead"><h2 class="grow">Papiers</h2>${canDo("papier")?`<button class="btn sm primary" data-act="papier-new" data-v="${v.id}">Ajouter un papier</button>`:""}</div>${tbl(["Papier","N°","Fin","État","Fichier"],papiersActuels().filter(p=>p.vehicule_id===v.id).sort((a,b)=>ts(a.date_fin)-ts(b.date_fin)).map(p=>{const e=papierEtat(p);return `<tr><td><b>${esc(p.type)}</b></td><td>${esc(p.numero)}</td><td>${dt(p.date_fin)}</td><td><span class="chip ${e.c}">${esc(e.t)}</span></td><td>${thumb(p.fichier,p.type)}</td></tr>`}),"Aucun papier enregistré pour ce camion.")}</div>
    <div class="panel"><div class="phead"><h2 class="grow">Carburant</h2><span class="sub">${fmt(conso4j(v.id))} L ces 4 derniers jours (limite ${LIMITE_4J} L)</span></div>${tbl(["Date","#Litres","#Prix/L","#Montant","#Km","Ticket"],S.carburant.filter(c=>c.vehicule_id===v.id).sort((a,b)=>ts(b.fait_le)-ts(a.fait_le)).slice(0,15).map(c=>`<tr><td>${dt(c.fait_le)}</td><td class="num">${fmt(c.litres)}</td><td class="num">${fmt(c.prix_litre)}</td><td class="num">${xaf(c.montant)}</td><td class="num">${c.km?fmt(c.km):""}</td><td>${thumb(c.photo,"Ticket")}</td></tr>`),"Aucun plein noté.")}</div>
    <div class="panel"><div class="phead"><h2 class="grow">Pièces montées</h2></div>${tbl(["Date","Pièce","#Qté","Km","Par","Photo"],pieces.map(m=>`<tr><td>${dt(m.created_at)}</td><td>${esc(designation(m.stock_id))}${m.motif?`<div class="sub">${esc(m.motif)}</div>`:""}</td><td class="num">${m.qte}</td><td>${m.km?fmt(m.km):""}</td><td>${esc(who(m.created_by))}</td><td>${thumb(m.photo,"Pièce usée")}</td></tr>`),"Aucune pièce montée sur ce camion.")}</div>
    ${direction?`<div class="panel"><div class="phead"><h2 class="grow">Bons de commande</h2></div>${tbl(["N°","Date","Fournisseur","#Montant","Statut"],bcs.map(b=>`<tr class="click" data-act="bc-open" data-id="${b.id}"><td class="ref">${esc(b.num)}</td><td>${dt(b.created_at)}</td><td>${esc(b.fournisseur)}</td><td class="num">${xaf(b.total)}</td><td>${chip("bc",b.statut)}</td></tr>`),"Aucun bon de commande pour ce camion.")}</div>`:""}
@@ -597,9 +602,9 @@ function vPapiers(){
   const act=papiersActuels().sort((a,b)=>ts(a.date_fin)-ts(b.date_fin));
   const exp=act.filter(p=>papierEtat(p).c==="bad"), bientot=act.filter(p=>papierEtat(p).c==="warn");
   const qui=p=>p.vehicule_id?vName(p.vehicule_id):p.personne;
-  const tuile=p=>{const e=papierEtat(p);return `<div class="vtile t-${e.c}"><span class="vt-top"><b style="font-size:17px">${esc(p.type)}</b><span class="chip ${e.c}">${esc(e.t)}</span></span><span class="vt-l"><b>${esc(qui(p))}</b>${p.numero?" · n° "+esc(p.numero):""}</span><span class="vt-l sub">Fin le ${dt(p.date_fin)}</span><span class="row">${thumb(p.fichier,p.type)}${canDo("veh")?`<button class="btn sm" data-act="papier-new" data-v="${p.vehicule_id||""}" data-p="${esc(p.personne)}" data-t="${esc(p.type)}">Renouveler</button>`:""}</span></div>`};
+  const tuile=p=>{const e=papierEtat(p);return `<div class="vtile t-${e.c}"><span class="vt-top"><b style="font-size:17px">${esc(p.type)}</b><span class="chip ${e.c}">${esc(e.t)}</span></span><span class="vt-l"><b>${esc(qui(p))}</b>${p.numero?" · n° "+esc(p.numero):""}</span><span class="vt-l sub">Fin le ${dt(p.date_fin)}</span><span class="row">${thumb(p.fichier,p.type)}${canDo("papier")?`<button class="btn sm" data-act="papier-new" data-v="${p.vehicule_id||""}" data-p="${esc(p.personne)}" data-t="${esc(p.type)}">Renouveler</button>`:""}</span></div>`};
   return `<div class="stack">
-   <div class="row"><h2 class="grow">Papiers et dates de fin</h2>${canDo("veh")?'<button class="btn primary" data-act="papier-new">Ajouter un papier</button>':""}</div>
+   <div class="row"><h2 class="grow">Papiers et dates de fin</h2>${canDo("papier")?'<button class="btn primary" data-act="papier-new">Ajouter un papier</button>':""}</div>
    <div class="kpis">
     <div class="kpi${exp.length?" k-bad":" k-ok"}"><span>Expirés</span><b>${exp.length}</b><em>${exp.length?"le camion ou la personne ne doit pas rouler":"aucun"}</em></div>
     <div class="kpi${bientot.length?" k-warn":" k-ok"}"><span>À renouveler sous 30 jours</span><b>${bientot.length}</b><em>${bientot.length?"préparer le renouvellement":"rien à préparer"}</em></div>
@@ -792,19 +797,20 @@ function vHse(){
   const form=[...S.formations].sort((a,b)=>ts(a.valable_jusqu_au||"2999-01-01")-ts(b.valable_jusqu_au||"2999-01-01"));
   const fEtat=f=>{if(!f.valable_jusqu_au)return {c:"ok",t:"sans date de fin"};const j=Math.floor((ts(f.valable_jusqu_au)+JOUR-Date.now())/JOUR);return {c:j<0?"bad":j<=30?"warn":"ok",t:j<0?"expirée":`encore ${j} jour(s)`}};
   return `<div class="stack">
-   <div class="row"><h2 class="grow">HSE : sécurité</h2>${canDo("stockop")?'<button class="btn primary" data-act="ctl-go">Contrôle avant départ</button>':""}<button class="btn bad" data-act="hse-new">Déclarer un accident ou un presque-accident</button></div>
+   <div class="row"><h2 class="grow">HSE : sécurité</h2>${canDo("controle")?'<button class="btn primary" data-act="ctl-go">Contrôle avant départ</button>':""}<button class="btn bad" data-act="hse-new">Déclarer un accident ou un presque-accident</button></div>
    <div class="kpis">
     <div class="kpi${js===null||js>30?" k-ok":js<7?" k-bad":" k-warn"}"><span>Jours sans accident</span><b>${js===null?"—":js}</b><em>${js===null?"aucun accident enregistré":"depuis le dernier accident"}</em></div>
     <div class="kpi${new Set(ctlJ.map(c=>c.vehicule_id)).size<vs.length?" k-warn":" k-ok"}"><span>Contrôles aujourd'hui</span><b>${new Set(ctlJ.map(c=>c.vehicule_id)).size} <small>/ ${vs.length}</small></b><em>${ctlJ.filter(c=>!c.ok).length} camion(s) à revoir</em></div>
     <div class="kpi"><span>Ce mois</span><b>${S.hse.filter(h=>h.type==="Accident"&&ts(h.survenu_le)>=m0).length} <small>accident(s)</small></b><em>${S.hse.filter(h=>h.type==="Presque accident"&&ts(h.survenu_le)>=m0).length} presque-accident(s)</em></div>
     <div class="kpi${S.hse.some(h=>h.statut==="Ouvert")?" k-warn":""}"><span>Fiches ouvertes</span><b>${S.hse.filter(h=>h.statut==="Ouvert").length}</b><em>à clore avec une action</em></div>
    </div>
+   ${S.smq.length||role()==="hse"?`<button class="panel smq-band" data-act="tab" data-k="smq"><span><b>Documents HSE et qualité</b><span class="sub">${S.smq.filter(d=>d.actif).length} en vigueur · ${smqARevoir().length} à revoir · ${S.smq.filter(d=>d.actif&&!d.fichier).length} sans fichier</span></span><span class="chip ${smqARevoir().length?"warn":"ok"}">Ouvrir</span></button>`:""}
    <div class="panel"><div class="phead"><h2 class="grow">Contrôles avant départ du jour</h2></div><div class="db"><div class="vtiles">${vs.map(v=>{const c=ctlJ.filter(x=>x.vehicule_id===v.id).sort(newest)[0];const e=!c?"warn":c.ok?"ok":"bad";
      return `<div class="vtile t-${e}"><span class="vt-top"><b>${esc(v.code)}</b><span class="chip ${e}">${!c?"Pas fait":c.ok?"Tout est bon":"À revoir"}</span></span><span class="vt-l sub">${c?`${dtt(c.created_at)} · ${esc(c.chauffeur||who(c.created_by))}`:"Le chauffeur doit faire le contrôle avant de partir"}</span>${c&&!c.ok?`<span class="vt-alert">${esc(Object.entries(c.points||{}).filter(([,x])=>x!==true).map(([k])=>k).join(", "))}${c.panne_num?" · "+esc(c.panne_num):""}</span>`:""}</div>`}).join("")}</div></div></div>
    <div class="panel"><div class="phead"><h2 class="grow">Accidents, presque-accidents, inspections</h2></div>${ev.length?`<div class="db">${ev.map(h=>`<div class="card">${thumb(h.photo,h.type)}<div class="grow"><div class="row"><span class="ref">${esc(h.num)}</span><span class="chip ${C_HSE[h.type]||""}">${esc(h.type)}</span><span class="chip ${h.statut==="Ouvert"?"orange":"ok"}">${esc(h.statut)}</span>${h.blesses?'<span class="chip bad">Blessé(s)</span>':""}<span class="chip">${esc(h.gravite)}</span></div>
      <div>${h.vehicule_id?`<b>${esc(vName(h.vehicule_id))}</b> · `:""}${esc(h.description)}</div><div class="sub">${dtt(h.survenu_le)}${h.lieu?" · "+esc(h.lieu):""} · déclaré par ${esc(who(h.created_by))}${h.actions?" · Action : "+esc(h.actions):""}</div>
-     ${h.statut==="Ouvert"&&["logistique","dg"].includes(role())?`<div style="margin-top:6px"><button class="btn sm ok" data-act="hse-clore" data-id="${h.id}">Clore avec une action</button></div>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Aucune fiche. Déclarer un presque-accident, c\'est éviter le prochain accident.</div>'}</div>
-   <div class="panel"><div class="phead"><h2 class="grow">Formations</h2>${canDo("veh")?'<button class="btn sm primary" data-act="form-new">Ajouter une formation</button>':""}</div>${form.length?`<div class="tbl"><table><thead><tr><th>Personne</th><th>Formation</th><th>Faite le</th><th>Valable jusqu'au</th><th>État</th><th>Attestation</th></tr></thead><tbody>${form.map(f=>{const e=fEtat(f);return `<tr><td><b>${esc(f.personne)}</b></td><td>${esc(f.theme)}</td><td>${dt(f.faite_le)}</td><td>${dt(f.valable_jusqu_au)}</td><td><span class="chip ${e.c}">${esc(e.t)}</span></td><td>${thumb(f.fichier,"Attestation")}</td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">Aucune formation enregistrée.</div>'}</div>
+     ${h.statut==="Ouvert"&&["logistique","dg","hse"].includes(role())?`<div style="margin-top:6px"><button class="btn sm ok" data-act="hse-clore" data-id="${h.id}">Clore avec une action</button></div>`:""}</div></div>`).join("")}</div>`:'<div class="empty">Aucune fiche. Déclarer un presque-accident, c\'est éviter le prochain accident.</div>'}</div>
+   <div class="panel"><div class="phead"><h2 class="grow">Formations</h2>${canDo("papier")?'<button class="btn sm primary" data-act="form-new">Ajouter une formation</button>':""}</div>${form.length?`<div class="tbl"><table><thead><tr><th>Personne</th><th>Formation</th><th>Faite le</th><th>Valable jusqu'au</th><th>État</th><th>Attestation</th></tr></thead><tbody>${form.map(f=>{const e=fEtat(f);return `<tr><td><b>${esc(f.personne)}</b></td><td>${esc(f.theme)}</td><td>${dt(f.faite_le)}</td><td>${dt(f.valable_jusqu_au)}</td><td><span class="chip ${e.c}">${esc(e.t)}</span></td><td>${thumb(f.fichier,"Attestation")}</td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">Aucune formation enregistrée.</div>'}</div>
   </div>`;
 }
 function baseControle(){
@@ -818,6 +824,67 @@ function baseControle(){
    <div class="step"><i>${(F.mal||[]).length?6:4}</i><span>Kilométrage <em>facultatif</em></span></div><input class="bigin" data-f="km" inputmode="numeric" value="${esc(F.km||"")}" placeholder="ex. 152300">
    ${F.err?`<div class="err">${esc(F.err)}</div>`:""}
    <button class="send" data-act="b-ctl-send" ${F.busy?"disabled":""}>${F.busy?"Enregistrement…":(F.mal||[]).length?"Enregistrer : camion à revoir":"Tout est bon : enregistrer"}</button></div>`;
+}
+
+/* ===== HSE : inventaire du système de management (même structure que le fichier SMQ INVENTAIRE) ===== */
+// [catégorie, onglet, titre de l'inventaire, préfixe de référence]
+const CATS=[["Procédure","PROCÉDURES","INVENTAIRE DES PROCÉDURES","PRO"],["Instruction","INSTRUCTIONS","INVENTAIRE DES INSTRUCTIONS","INS"],["Enregistrement","ENREGISTREMENTS","INVENTAIRE DES ENREGISTREMENTS","ENR"],["Politique","POLITIQUES","INVENTAIRE DES POLITIQUES","POL"],["Registre","REGISTRES","INVENTAIRE DES REGISTRES","SO"]];
+const COLS=["INTITULÉ","RÉFÉRENCE","SERVICE","DATE DE CRÉATION","DATE DE LA DERNIÈRE MISE À JOUR","OBJET DE LA MISE À JOUR","VERSION"];
+let fCat="Procédure", fCherche="", voirRetires=false;
+const derniereMaj=d=>d.date_maj||d.date_creation;
+function smqEtat(d){
+  if(!d.actif) return {c:"",t:"Retiré"};
+  const m=derniereMaj(d); if(!m) return {c:"warn",t:"Date inconnue"};
+  const lim=new Date(m);lim.setMonth(lim.getMonth()+(d.revision_mois||12));
+  const j=Math.floor((lim.getTime()-Date.now())/JOUR);
+  return j<0?{c:"bad",t:`À revoir (depuis ${-j} j)`}:j<=30?{c:"warn",t:`À revoir dans ${j} j`}:{c:"ok",t:"À jour"};
+}
+const smqARevoir=()=>S.smq.filter(d=>d.actif&&smqEtat(d).c!=="ok");
+const peutSmq=()=>["hse","admin"].includes(role())&&["hse","admin"].includes(me.role);
+// Prochaine référence : « PRO 028 QHSE V1 » (registres : « SO », comme dans l'inventaire).
+function prochaineRef(cat,service,version){
+  const c=CATS.find(x=>x[0]===cat); if(!c||c[3]==="SO") return "SO";
+  const nums=S.smq.filter(d=>d.categorie===cat).map(d=>{const m=String(d.reference).toUpperCase().replace(/\s+/g,"").match(new RegExp("^"+c[3]+"(\\d+)"));return m?+m[1]:0});
+  const n=String((nums.length?Math.max(...nums):0)+1).padStart(3,"0");
+  return [c[3],n,String(service||"").trim().toUpperCase(),String(version||"V1").trim().toUpperCase()].filter(Boolean).join(" ");
+}
+function vSmq(){
+  const C=CATS.find(c=>c[0]===fCat)||CATS[0];
+  const actifs=S.smq.filter(d=>d.actif);
+  const list=S.smq.filter(d=>(voirRetires?!d.actif:d.actif)&&d.categorie===C[0]&&(!fCherche||(d.intitule+" "+d.reference+" "+d.service).toLowerCase().includes(fCherche.toLowerCase())))
+    .sort((a,b)=>String(a.reference).replace(/\s+/g,"").localeCompare(String(b.reference).replace(/\s+/g,""),"fr",{numeric:true})||ts(a.date_creation||a.created_at)-ts(b.date_creation||b.created_at));
+  const revoir=smqARevoir(), sansF=actifs.filter(d=>!d.fichier);
+  const cols=C[0]==="Registre"?COLS.slice(0,6):COLS;
+  return `<div class="stack">
+   <div class="row"><h2 class="grow">Inventaire SMQ</h2><button class="btn" data-act="smq-export">Exporter en Excel</button>${peutSmq()?`<button class="btn primary" data-act="smq-edit" data-id="">Ajouter ${C[0]==="Enregistrement"?"un enregistrement":C[0]==="Instruction"?"une instruction":C[0]==="Politique"?"une politique":C[0]==="Registre"?"un registre":"une procédure"}</button>`:""}</div>
+   <div class="kpis">
+    <div class="kpi"><span>Documents en vigueur</span><b>${actifs.length}</b><em>dans les 5 inventaires</em></div>
+    <div class="kpi${revoir.some(d=>smqEtat(d).c==="bad")?" k-bad":revoir.length?" k-warn":" k-ok"}"><span>À revoir</span><b>${revoir.length}</b><em>pas mis à jour depuis 12 mois</em></div>
+    <div class="kpi${sansF.length?" k-warn":" k-ok"}"><span>Sans fichier</span><b>${sansF.length}</b><em>joindre le document signé</em></div>
+    <div class="kpi"><span>Retirés</span><b>${S.smq.length-actifs.length}</b><em>gardés dans l'historique</em></div>
+   </div>
+   <div class="vtiles">${CATS.map(([k,l,,pre])=>{const n=actifs.filter(d=>d.categorie===k);const r=n.filter(d=>smqEtat(d).c!=="ok").length;
+     return `<button class="vtile t-${fCat===k?"sel":r?"warn":"ok"}" data-act="smq-cat" data-k="${k}"><span class="vt-top"><b style="font-size:16px">${esc(l)}</b><span class="chip blue">${pre}</span></span><span class="vt-l"><b style="font-size:26px">${n.length}</b> document(s)</span><span class="vt-l sub">${n.length?(r?r+" à revoir":"tout est à jour"):"vide"}</span></button>`}).join("")}</div>
+   <div class="panel"><div class="phead"><h2 class="grow">${esc(C[2])}${voirRetires?" (retirés)":""}</h2>
+     <input id="smq-q" placeholder="Chercher…" value="${esc(fCherche)}" style="max-width:220px">
+     <button class="btn sm" data-act="smq-retires">${voirRetires?"Documents en vigueur":"Voir les retirés"}</button></div>
+   ${list.length?`<div class="tbl"><table class="smq"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}<th>ÉTAT</th><th>FICHIER</th><th></th></tr></thead><tbody>${list.map(d=>{const e=smqEtat(d);return `<tr><td><b>${esc(d.intitule)}</b></td><td class="ref">${esc(d.reference||"")}</td><td>${esc(d.service)}</td><td>${dt(d.date_creation)}</td><td>${dt(d.date_maj)}</td><td>${esc(d.objet_maj)}</td>${C[0]==="Registre"?"":`<td>${esc(d.version)}</td>`}<td><span class="chip ${e.c}">${esc(e.t)}</span></td><td>${d.fichier?thumb(d.fichier,d.intitule):'<span class="sub">—</span>'}</td><td class="num">${peutSmq()?`<button class="btn sm" data-act="smq-edit" data-id="${d.id}">Mettre à jour</button>`:""}${S.smq_versions.some(v=>v.document_id===d.id)?` <button class="btn sm" data-act="smq-hist" data-id="${d.id}">Versions</button>`:""}</td></tr>`}).join("")}</tbody></table></div>`:`<div class="empty">${voirRetires?"Aucun document retiré.":peutSmq()?`Aucun document dans cet inventaire. Appuyez sur « Ajouter » : la référence est proposée toute seule (${esc(prochaineRef(C[0],"QHSE","V1"))}).`:"Aucun document dans cet inventaire."}</div>`}</div></div>`;
+}
+// Bibliothèque Excel (chargée à la demande).
+let xlsxLib=null;
+function chargerXlsx(){if(window.XLSX&&window.XLSX.read) return Promise.resolve();if(xlsxLib) return xlsxLib;
+  xlsxLib=new Promise((ok,ko)=>{const s=document.createElement("script");s.src="assets/xlsx.mini.min.js";s.onload=ok;s.onerror=()=>{xlsxLib=null;ko(new Error("La lecture du fichier Excel n'a pas pu démarrer."))};document.head.appendChild(s)});return xlsxLib}
+// Export : un classeur avec les 5 onglets et les colonnes de l'inventaire SMQ.
+async function exporterSmq(){
+  try{await chargerXlsx()}catch(e){toast(errMsg(e));return}
+  const X=window.XLSX, wb=X.utils.book_new(), d8=v=>v?new Date(v+"T00:00:00"):"";
+  CATS.forEach(([k,onglet,titre])=>{const reg=k==="Registre";const cols=reg?COLS.slice(0,6):COLS;
+    const rows=S.smq.filter(d=>d.actif&&d.categorie===k).sort((a,b)=>String(a.reference).replace(/\s+/g,"").localeCompare(String(b.reference).replace(/\s+/g,""),"fr",{numeric:true}))
+      .map(d=>{const r=[d.intitule,d.reference||"SO",d.service,d8(d.date_creation),d8(d.date_maj),d.objet_maj||""];if(!reg)r.push(d.version||"");return r});
+    const ws=X.utils.aoa_to_sheet([[titre],[],cols,...rows],{cellDates:true,dateNF:"dd/mm/yyyy"});
+    ws["!cols"]=[{wch:50},{wch:20},{wch:12},{wch:14},{wch:16},{wch:30},{wch:10}];ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:cols.length-1}}];
+    X.utils.book_append_sheet(wb,ws,onglet)});
+  X.writeFile(wb,"SMQ_INVENTAIRE_"+new Date().toISOString().slice(0,10)+".xlsx");
 }
 
 /* ===== Journal ===== */
@@ -941,7 +1008,7 @@ function vParams(){
   const ident=p=>{const e=p.email||"";return e.endsWith("@"+CFG.domaine)?e.slice(0,-(CFG.domaine.length+1)):e};
   return `<div class="stack"><div class="panel"><div class="phead"><h2 class="grow">Comptes</h2><button class="btn primary" data-act="cpt-new">Créer un compte</button></div>
   <div class="db"><p class="sub">Créez un compte par personne. Donnez-lui son identifiant et son mot de passe. Une personne sans rôle ou désactivée ne voit rien.</p></div>
-  ${ps.length?`<div class="tbl"><table><thead><tr><th>Personne</th><th>Identifiant</th><th>Rôle</th><th>Accès</th><th></th></tr></thead><tbody>${ps.map(p=>p.id===me.id?`<tr><td>${esc(p.nom)} (vous)</td><td>${esc(ident(p))}</td><td>Administration</td><td><span class="chip ok">Actif</span></td><td class="num"><button class="btn sm" data-act="mon-mdp">Changer mon mot de passe</button></td></tr>`:`<tr><td>${esc(p.nom)}</td><td>${esc(ident(p))}</td><td><select data-role="${p.id}" style="width:auto"><option value="">Aucun accès</option>${["base","logistique","dg","admin"].map(k=>`<option value="${k}"${p.role===k?" selected":""}>${ROLES[k]}</option>`).join("")}</select></td><td>${p.actif?`<button class="btn sm" data-act="cpt-actif" data-id="${p.id}" data-v="0">Désactiver</button>`:`<button class="btn sm ok" data-act="cpt-actif" data-id="${p.id}" data-v="1">Réactiver</button>`}</td><td class="num"><button class="btn sm" data-act="cpt-mdp" data-id="${p.id}">Changer le mot de passe</button></td></tr>`).join("")}</tbody></table></div>`:""}</div>
+  ${ps.length?`<div class="tbl"><table><thead><tr><th>Personne</th><th>Identifiant</th><th>Rôle</th><th>Accès</th><th></th></tr></thead><tbody>${ps.map(p=>p.id===me.id?`<tr><td>${esc(p.nom)} (vous)</td><td>${esc(ident(p))}</td><td>Administration</td><td><span class="chip ok">Actif</span></td><td class="num"><button class="btn sm" data-act="mon-mdp">Changer mon mot de passe</button></td></tr>`:`<tr><td>${esc(p.nom)}</td><td>${esc(ident(p))}</td><td><select data-role="${p.id}" style="width:auto"><option value="">Aucun accès</option>${["base","logistique","dg","hse","admin"].map(k=>`<option value="${k}"${p.role===k?" selected":""}>${ROLES[k]}</option>`).join("")}</select></td><td>${p.actif?`<button class="btn sm" data-act="cpt-actif" data-id="${p.id}" data-v="0">Désactiver</button>`:`<button class="btn sm ok" data-act="cpt-actif" data-id="${p.id}" data-v="1">Réactiver</button>`}</td><td class="num"><button class="btn sm" data-act="cpt-mdp" data-id="${p.id}">Changer le mot de passe</button></td></tr>`).join("")}</tbody></table></div>`:""}</div>
   <div class="panel"><div class="phead"><h2 class="grow">Validation du DG</h2></div><div class="db">
    <div class="f" style="max-width:360px"><label for="seuil">Validation obligatoire au-dessus de (XAF)</label><input id="seuil" type="number" min="0" value="${+S.seuil||0}"></div>
    <p class="sub">0 = toutes les commandes passent par le DG (recommandé). Sous le seuil, la commande est validée automatiquement et le journal l'indique.</p>
@@ -1092,10 +1159,12 @@ H["seuil-save"]=async()=>{try{await rpc("stp2i_definir_seuil",{p_seuil:Math.max(
 H["cpt-new"]=()=>openDlg("Créer un compte",`
   <div class="f"><label for="c-nom">Nom complet</label><input id="c-nom" placeholder="ex. VOUMISSA Gloria"></div>
   <div class="grid2"><div class="f"><label for="c-id">Identifiant</label><input id="c-id" autocapitalize="none" placeholder="ex. gloria"></div>
-  <div class="f"><label for="c-role">Rôle</label><select id="c-role">${["base","logistique","dg","admin"].map(k=>`<option value="${k}">${ROLES[k]}</option>`).join("")}</select></div></div>
+  <div class="f"><label for="c-role">Rôle</label><select id="c-role">${["base","logistique","dg","hse","admin"].map(k=>`<option value="${k}">${ROLES[k]}</option>`).join("")}</select></div></div>
   <div class="f"><label for="c-pw">Mot de passe (6 caractères minimum)</label><input id="c-pw" autocomplete="new-password"></div>
   <p class="sub">Communiquez l'identifiant et le mot de passe à la personne en main propre.</p>`,"Créer le compte",async()=>{
-  const r=await fonction({action:"creer",nom:val("c-nom"),identifiant:val("c-id"),mot_de_passe:$("#c-pw").value,role:val("c-role")});
+  const roleVoulu=val("c-role");
+  const r=await fonction({action:"creer",nom:val("c-nom"),identifiant:val("c-id"),mot_de_passe:$("#c-pw").value,role:roleVoulu==="hse"?"base":roleVoulu});
+  if(roleVoulu==="hse"){const {data}=await sb.from("stp2i_profils").select("id").eq("email",r.email).maybeSingle();if(data) await rpc("stp2i_definir_role",{p_user:data.id,p_role:"hse",p_actif:true})}
   openDlg("Compte créé",`<p>Donnez ces informations à la personne :</p><p>Identifiant : <b>${esc(r.identifiant||r.email)}</b></p><p class="sub">Le mot de passe est celui que vous venez de choisir.</p>`,null,null);charger();return false});
 H["cpt-mdp"]=dd=>{const p=byId("profils",dd.id);openDlg("Nouveau mot de passe pour "+(p.nom||p.email),`<div class="f"><label for="m-pw">Nouveau mot de passe (6 caractères minimum)</label><input id="m-pw" autocomplete="new-password"></div>`,"Enregistrer",async()=>{
   await fonction({action:"mot_de_passe",id:p.id,mot_de_passe:$("#m-pw").value});toast("Mot de passe changé")})};
@@ -1297,16 +1366,43 @@ H["form-new"]=()=>openDlg("Ajouter une formation",`
   const f=$("#fm-f").files[0];const fichier=f?await upload(f):null;
   await rpc("stp2i_enregistrer_formation",{p_personne:val("fm-p"),p_theme:val("fm-t"),p_le:val("fm-d")||null,p_jusqu_au:val("fm-j")||null,p_fichier:fichier});toast("Formation enregistrée")});
 
+/* ---------- Documents HSE ---------- */
+H["smq-cat"]=d=>{fCat=d.k||"";render(true)};
+H["smq-retires"]=()=>{voirRetires=!voirRetires;render(true)};
+H["smq-edit"]=d=>{const x=d.id?byId("smq",d.id):{categorie:fCat||"Procédure",revision_mois:12};const nouveau=!d.id;
+  openDlg(nouveau?"Ajouter un document":"Mettre à jour : "+x.intitule,`
+  <div class="grid2"><div class="f"><label for="sm-c">Catégorie</label><select id="sm-c">${CATS.map(([k])=>`<option value="${k}"${k===x.categorie?" selected":""}>${k}</option>`).join("")}</select></div><div class="f"><label for="sm-r">Référence</label><input id="sm-r"${nouveau?' data-auto="1"':""} value="${esc(nouveau?prochaineRef(x.categorie,"QHSE","V1"):x.reference||"")}"><span class="sub">Proposée toute seule, comme dans l'inventaire.</span></div></div>
+  <div class="f"><label for="sm-i">Intitulé</label><input id="sm-i" value="${esc(x.intitule||"")}"></div>
+  <div class="grid2"><div class="f"><label for="sm-s">Service</label><input id="sm-s" list="sm-sl" value="${esc(nouveau?"QHSE":x.service||"")}"><datalist id="sm-sl">${[["QHSE","Qualité, hygiène, sécurité, environnement"],["RH","Ressources humaines"],["MAINT","Maintenance"],["DIR","Direction"],["LOG","Logistique"],["EXP","Exploitation"]].map(([s,l])=>`<option value="${s}">${l}</option>`).join("")}</datalist></div><div class="f"><label for="sm-v">Version</label><input id="sm-v" value="${esc(nouveau?"V1":x.version||"")}"></div>
+  <div class="f"><label for="sm-dc">Date de création</label><input id="sm-dc" type="date" value="${nouveau?new Date().toISOString().slice(0,10):x.date_creation||""}"></div><div class="f"><label for="sm-dm">Date de la dernière mise à jour</label><input id="sm-dm" type="date" value="${nouveau?"":new Date().toISOString().slice(0,10)}"></div>
+  <div class="f"><label for="sm-rv">À revoir tous les (mois)</label><input id="sm-rv" type="number" min="1" max="60" value="${x.revision_mois||12}"></div><div class="f"><label for="sm-f">Document signé (PDF ou photo)</label><input id="sm-f" type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx"></div></div>
+  <div class="f"><label for="sm-o">Objet de la mise à jour</label><input id="sm-o" value="${esc(nouveau?"Création du document":"")}" placeholder="ex. révision générale"></div>
+  ${!nouveau?`<p class="sub">Si la version ou le fichier change, l'ancienne version reste dans l'historique.</p>${x.actif?`<div><button type="button" class="btn sm bad" data-act="smq-retirer" data-id="${x.id}">Retirer ce document</button></div>`:`<div><button type="button" class="btn sm ok" data-act="smq-remettre" data-id="${x.id}">Remettre en vigueur</button></div>`}`:""}`,"Enregistrer",async()=>{
+  if(!val("sm-i")) throw "Indiquez l'intitulé.";
+  if(!nouveau&&!val("sm-o")) throw "Dites ce qui change (objet de la mise à jour).";
+  const f=$("#sm-f").files[0];const fichier=f?await upload(f):null;
+  await rpc("stp2i_smq_enregistrer",{p_id:d.id||null,p_categorie:val("sm-c"),p_intitule:val("sm-i"),p_reference:val("sm-r"),p_service:val("sm-s").toUpperCase(),p_version:val("sm-v").toUpperCase(),p_date_creation:val("sm-dc")||null,p_date_maj:val("sm-dm")||null,p_objet_maj:val("sm-o"),p_fichier:fichier,p_revision_mois:+val("sm-rv")||12});toast("Document enregistré")})};
+H["smq-retirer"]=d=>{const x=byId("smq",d.id);openDlg("Retirer : "+x.intitule,`<p class="sub">Le document n'est pas effacé : il passe dans « retirés ».</p><div class="f"><label for="sr-m">Pourquoi ?</label><input id="sr-m" placeholder="ex. remplacé par PRO 028"></div>`,"Retirer",async()=>{
+  if(!val("sr-m")) throw "Dites pourquoi.";await rpc("stp2i_smq_archiver",{p_id:x.id,p_actif:false,p_motif:val("sr-m")});toast("Document retiré")},"bad")};
+H["smq-remettre"]=async d=>{try{await rpc("stp2i_smq_archiver",{p_id:d.id,p_actif:true,p_motif:""});$("#dlg").close();toast("Document remis en vigueur");charger()}catch(e){toast(errMsg(e))}};
+H["smq-hist"]=d=>{const x=byId("smq",d.id);const vs=S.smq_versions.filter(v=>v.document_id===x.id).sort((a,b)=>ts(b.remplace_le)-ts(a.remplace_le));
+  openDlg("Versions : "+x.intitule,`<div class="tbl"><table><thead><tr><th>Version</th><th>Date</th><th>Objet</th><th>Fichier</th><th>Remplacée le</th></tr></thead><tbody><tr><td><b>${esc(x.version)}</b> (actuelle)</td><td>${dt(derniereMaj(x))}</td><td>${esc(x.objet_maj)}</td><td>${thumb(x.fichier,x.intitule)}</td><td></td></tr>${vs.map(v=>`<tr><td>${esc(v.version)}</td><td>${dt(v.date_maj)}</td><td>${esc(v.objet_maj)}</td><td>${thumb(v.fichier,v.version)}</td><td>${dt(v.remplace_le)} · ${esc(who(v.remplace_par))}</td></tr>`).join("")}</tbody></table></div>`,null,null)};
+H["smq-export"]=()=>exporterSmq();
+
 document.addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;if(H[a]){if(el.tagName==="BUTTON"&&el.type!=="submit")e.preventDefault();H[a](el.dataset,el)}});
 document.addEventListener("input",e=>{const t=e.target;
   if(t.dataset.f){F[t.dataset.f]=t.value}
   if(t.id==="lg-id")F.lgid=t.value;
+  if(t.id==="smq-q"){fCherche=t.value;clearTimeout(window._smqT);window._smqT=setTimeout(()=>{render(true);const q=$("#smq-q");if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}},250)}
   if(t.id&&/^l-[qp]-/.test(t.id))bcTotal();
+  if(["sm-s","sm-v"].includes(t.id)){const r=$("#sm-r");if(r&&r.dataset.auto)r.value=prochaineRef(val("sm-c"),val("sm-s"),val("sm-v"))}
+  if(t.id==="sm-r")delete t.dataset.auto;
 });
 document.addEventListener("change",async e=>{const t=e.target;
   if(t.id==="viewas"){viewAs=t.value;try{localStorage.setItem("stp2i-viewas",viewAs)}catch(x){}tab=null;screen="home";F={};render(true)}
   if(t.id==="f-dem"){fDem=t.value;render(true)}
   if(t.id==="f-bc"){fBc=t.value;render(true)}
+  if(t.id==="sm-c"){const r=$("#sm-r");if(r&&r.dataset.auto)r.value=prochaineRef(t.value,val("sm-s"),val("sm-v"))}
   if(t.dataset.role!==undefined&&t.dataset.role){const p=byId("profils",t.dataset.role);
     try{await rpc("stp2i_definir_role",{p_user:p.id,p_role:t.value||null,p_actif:p.actif});toast("Rôle enregistré");charger()}catch(x){toast(errMsg(x));render(true)}}
   if(t.dataset.photo){const k=t.dataset.photo,file=t.files[0];if(!file)return;F[k+"_busy"]=true;F.err="";render(true);
