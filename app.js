@@ -28,6 +28,11 @@ const C_STAT={
  facture:{"Conforme":"ok","Bloquée":"bad","Payée":""}
 };
 const chip=(kind,s)=>`<span class="chip ${C_STAT[kind][s]||""}">${esc(s)}</span>`;
+// Temps d'attente en couleur : vert, puis orange, puis rouge (plus vite si urgent).
+const HEURE=3600e3;
+function depuis(t){const h=(Date.now()-ts(t))/HEURE;if(h<1)return "il y a "+Math.max(1,Math.round(h*60))+" min";if(h<48)return "il y a "+Math.round(h)+" h";return "il y a "+Math.round(h/24)+" jours"}
+function attenteCls(t,urgent,lent){const h=(Date.now()-ts(t))/HEURE;const [o,r]=urgent?[2,8]:lent?[72,168]:[24,72];return h>=r?"bad":h>=o?"warn":"ok"}
+const attChip=(t,urgent,lent)=>`<span class="chip ${attenteCls(t,urgent,lent)}" title="Temps d'attente">${depuis(t)}</span>`;
 
 /* ---------- État ---------- */
 const S={vehicules:[],demandes:[],commandes:[],lignes:[],receptions:[],stock:[],mouvements:[],factures:[],profils:[],journal:[],attendues:[],seuil:0};
@@ -45,6 +50,7 @@ const newest=(a,b)=>ts(b.created_at)-ts(a.created_at);
 const who=id=>{if(!id)return "";const p=byId("profils",id);return p?(p.nom||p.email||"Utilisateur"):"Utilisateur"};
 const lignesDe=cid=>S.lignes.filter(l=>l.commande_id===cid).sort((a,b)=>a.position-b.position);
 const designation=sid=>{const s=byId("stock",sid);return s?s.designation:""};
+const urgentBc=b=>{const d=b.demande_id?byId("demandes",b.demande_id):null;return !!(d&&d.urgent)};
 
 // Rôle affiché. L'administrateur peut regarder les autres écrans ; la base de données
 // garde le dernier mot (le DG seul valide et paie).
@@ -187,8 +193,8 @@ function tabsFor(r){
         nF=S.factures.filter(f=>f.statut==="Bloquée").length, nP=S.factures.filter(f=>f.statut==="Conforme").length;
   return ({
     base:[["base","Accueil"]],
-    logistique:[["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["camions","Camions"],["journal","Journal"]],
-    dg:[["valider","À valider",nV],["factures","Factures à payer",nP],["bord","Tableau de bord"],["commandes","Bons de commande"],["stock","Stock"],["camions","Camions"],["journal","Journal"]],
+    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["camions","Camions"],["journal","Journal"]],
+    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["stock","Stock"],["camions","Camions"],["journal","Journal"]],
     admin:[["params","Comptes et réglages"],["bord","Tableau de bord"],["journal","Journal"]]
   })[r];
 }
@@ -295,7 +301,7 @@ function vDemandes(){
   const list=S.demandes.filter(d=>!fDem||d.statut===fDem).sort(newest);
   const opts=["","Nouvelle","En validation","Commandée","Reçue à la base","Montée","Refusée"];
   return `<div class="panel"><div class="phead"><h2 class="grow">Demandes de la base</h2><select id="f-dem" style="width:auto">${opts.map(o=>`<option value="${o}"${o===fDem?" selected":""}>${o||"Toutes"}</option>`).join("")}</select></div>
-  ${list.length?`<div class="tbl"><table><thead><tr><th>N°</th><th>Date</th><th>Camion</th><th>Pièce</th><th class="num">Qté</th><th>Photo</th><th>Statut</th><th></th></tr></thead><tbody>${list.map(d=>{const c=d.commande_id?byId("commandes",d.commande_id):null;return `<tr><td class="ref">${esc(d.num)}${d.urgent?' <span class="chip bad">Urgent</span>':""}</td><td>${dt(d.created_at)}<div class="sub">${esc(who(d.created_by))}</div></td><td>${esc(vName(d.vehicule_id))}</td><td>${esc(d.piece||"Voir la photo")}${d.motif?`<div class="sub">${esc(d.motif)}</div>`:""}</td><td class="num">${d.qte}</td><td>${thumb(d.photo,"Demande")}</td><td>${chip("demande",d.statut)}${c?`<div class="sub">${esc(c.num)}</div>`:""}</td><td class="num">${d.statut==="Nouvelle"&&canDo("bc")?`<button class="btn sm primary" data-act="bc-new" data-id="${d.id}">Créer le bon de commande</button> <button class="btn sm" data-act="dem-refuse" data-id="${d.id}">Refuser</button>`:""}</td></tr>`}).join("")}</tbody></table></div>`:`<div class="empty">${fDem==="Nouvelle"?"Aucune nouvelle demande à traiter.":"Aucune demande."}</div>`}</div>`;
+  ${list.length?`<div class="tbl"><table><thead><tr><th>N°</th><th>Date</th><th>Camion</th><th>Pièce</th><th class="num">Qté</th><th>Photo</th><th>Statut</th><th></th></tr></thead><tbody>${list.map(d=>{const c=d.commande_id?byId("commandes",d.commande_id):null;return `<tr><td class="ref">${esc(d.num)}${d.urgent?' <span class="chip bad">Urgent</span>':""}</td><td>${dt(d.created_at)}<div class="sub">${esc(who(d.created_by))}</div></td><td>${esc(vName(d.vehicule_id))}</td><td>${esc(d.piece||"Voir la photo")}${d.motif?`<div class="sub">${esc(d.motif)}</div>`:""}</td><td class="num">${d.qte}</td><td>${thumb(d.photo,"Demande")}</td><td>${chip("demande",d.statut)}${d.statut==="Nouvelle"?" "+attChip(d.created_at,d.urgent):""}${c?`<div class="sub">${esc(c.num)}</div>`:""}</td><td class="num">${d.statut==="Nouvelle"&&canDo("bc")?`<button class="btn sm primary" data-act="bc-new" data-id="${d.id}">Créer le bon de commande</button> <button class="btn sm" data-act="dem-refuse" data-id="${d.id}">Refuser</button>`:""}</td></tr>`}).join("")}</tbody></table></div>`:`<div class="empty">${fDem==="Nouvelle"?"Aucune nouvelle demande à traiter.":"Aucune demande."}</div>`}</div>`;
 }
 
 /* ===== Bons de commande ===== */
@@ -304,7 +310,7 @@ function vCommandes(){
   const list=S.commandes.filter(b=>!fBc||b.statut===fBc).sort(newest);
   const opts=["","À valider","Validé","Refusé","Reçu partiel","Reçu","Facturé","Payé"];
   return `<div class="panel"><div class="phead"><h2 class="grow">Bons de commande</h2><select id="f-bc" style="width:auto">${opts.map(o=>`<option value="${o}"${o===fBc?" selected":""}>${o||"Tous"}</option>`).join("")}</select></div>
-  ${list.length?`<div class="tbl"><table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Camion</th><th class="num">Total</th><th>Statut</th><th>Réception</th><th>Facture</th></tr></thead><tbody>${list.map(b=>{const f=S.factures.find(x=>x.commande_id===b.id);const nr=S.receptions.filter(r=>r.commande_id===b.id).length;return `<tr class="click" data-act="bc-open" data-id="${b.id}"><td class="ref">${esc(b.num)}</td><td>${dt(b.created_at)}</td><td>${esc(b.fournisseur)}</td><td>${esc(vName(b.vehicule_id))}</td><td class="num">${xaf(b.total)}</td><td>${chip("bc",b.statut)}</td><td>${nr?`${nr} bon(s)`:'<span class="sub">—</span>'}</td><td>${f?chip("facture",f.statut):'<span class="sub">—</span>'}</td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">Aucun bon de commande.</div>'}</div>`;
+  ${list.length?`<div class="tbl"><table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Camion</th><th class="num">Total</th><th>Statut</th><th>Réception</th><th>Facture</th></tr></thead><tbody>${list.map(b=>{const f=S.factures.find(x=>x.commande_id===b.id);const nr=S.receptions.filter(r=>r.commande_id===b.id).length;return `<tr class="click" data-act="bc-open" data-id="${b.id}"><td class="ref">${esc(b.num)}</td><td>${dt(b.created_at)}</td><td>${esc(b.fournisseur)}</td><td>${esc(vName(b.vehicule_id))}</td><td class="num">${xaf(b.total)}</td><td>${chip("bc",b.statut)}${b.statut==="À valider"?" "+attChip(b.created_at,urgentBc(b)):["Validé","Reçu partiel"].includes(b.statut)?" "+attChip(b.valide_le||b.created_at,urgentBc(b),true):""}</td><td>${nr?`${nr} bon(s)`:'<span class="sub">—</span>'}</td><td>${f?chip("facture",f.statut):'<span class="sub">—</span>'}</td></tr>`}).join("")}</tbody></table></div>`:'<div class="empty">Aucun bon de commande.</div>'}</div>`;
 }
 
 /* ===== Factures ===== */
@@ -345,9 +351,9 @@ function vJournal(){
 
 /* ===== DG ===== */
 function vValider(){
-  const list=S.commandes.filter(b=>b.statut==="À valider").sort(newest);
+  const list=S.commandes.filter(b=>b.statut==="À valider").sort((a,b)=>ts(a.created_at)-ts(b.created_at));
   return `<div class="stack"><h2>Bons de commande à valider</h2><p class="sub">Une commande n'est valable que si elle est validée ici. Un accord donné par téléphone ne suffit pas.</p>
-  ${list.length?`<div class="valid">${list.map(b=>{const d=b.demande_id?byId("demandes",b.demande_id):null;return `<div class="vcard"><div class="row"><span class="ref">${esc(b.num)}</span>${d&&d.urgent?'<span class="chip bad">Urgent : camion arrêté</span>':""}<span class="grow"></span><span class="amount">${xaf(b.total)}</span></div>
+  ${list.length?`<div class="valid">${list.map(b=>{const d=b.demande_id?byId("demandes",b.demande_id):null;return `<div class="vcard w-${attenteCls(b.created_at,d&&d.urgent)}"><div class="row"><span class="ref">${esc(b.num)}</span>${d&&d.urgent?'<span class="chip bad">Urgent : camion arrêté</span>':""}${attChip(b.created_at,d&&d.urgent)}<span class="grow"></span><span class="amount">${xaf(b.total)}</span></div>
    <div><b>${esc(b.fournisseur)}</b> · ${esc(vName(b.vehicule_id))}</div>
    <div class="sub">${lignesDe(b.id).map(l=>`${esc(l.designation)} × ${l.qte} à ${xaf(l.pu)}`).join("<br>")}</div>
    <div class="docs">${d?docItem(d.photo,"Demande "+d.num):""}${docItem(b.devis,"Devis")}</div>
@@ -355,25 +361,91 @@ function vValider(){
    <div class="sub">Préparé par ${esc(who(b.created_by))} le ${dt(b.created_at)}${d?` · demande ${esc(d.num)} du ${dt(d.created_at)}`:""}</div>
    ${canDo("valider")?`<div class="vbtns"><button class="btn ok" data-act="bc-ok" data-id="${b.id}">Valider</button><button class="btn bad" data-act="bc-no" data-id="${b.id}">Refuser</button></div>`:'<div class="sub">Seul le DG peut valider.</div>'}</div>`}).join("")}</div>`:'<div class="empty panel">Rien à valider pour le moment.</div>'}</div>`;
 }
+let zoom=null;
+const debutMois=(k=0)=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth()+k,1).getTime()};
+const engage=b=>!["À valider","Refusé"].includes(b.statut);
+function barres(rows,fmtV){const max=Math.max(1,...rows.map(r=>r[1]));
+  return rows.length?`<div class="bars">${rows.map(([l,v])=>`<div class="bar"><span class="bl">${esc(l)}</span><span class="bt"><i style="width:${Math.max(2,Math.round(v/max*100))}%"></i></span><span class="bv">${fmtV(v)}</span></div>`).join("")}</div>`:'<div class="empty">Pas encore de données.</div>'}
+function cartesBord(){
+  const m0=debutMois(),m1=debutMois(-1);
+  const bcM=S.commandes.filter(b=>engage(b)&&ts(b.valide_le||b.created_at)>=m0);
+  const bcP=S.commandes.filter(b=>engage(b)&&ts(b.valide_le||b.created_at)>=m1&&ts(b.valide_le||b.created_at)<m0);
+  const somme=a=>a.reduce((s,b)=>s+(+b.total||0),0);
+  const av=S.commandes.filter(b=>b.statut==="À valider");
+  const plusVieux=av.length?av.reduce((a,b)=>ts(a.created_at)<ts(b.created_at)?a:b):null;
+  const conf=S.factures.filter(f=>f.statut==="Conforme");
+  return [
+    {k:"depenses",t:"Dépenses du mois",v:fmt(somme(bcM)),u:"XAF",s:`${bcM.length} bon(s) · mois dernier ${fmt(somme(bcP))} XAF`},
+    {k:"attente",t:"Bons à valider",v:av.length,s:plusVieux?"le plus ancien "+depuis(plusVieux.created_at):"rien en attente",c:plusVieux?attenteCls(plusVieux.created_at,urgentBc(plusVieux)):"ok"},
+    {k:"panne",t:"Camions en panne",v:S.vehicules.filter(v=>v.statut==="En panne").length,s:`sur ${S.vehicules.filter(v=>v.statut!=="Hors parc").length} camions`,c:S.vehicules.some(v=>v.statut==="En panne")?"bad":"ok"},
+    {k:"demandes",t:"Demandes en cours",v:S.demandes.filter(d=>!["Montée","Refusée"].includes(d.statut)).length,s:`${S.demandes.filter(d=>d.statut==="Nouvelle").length} nouvelle(s) à traiter`},
+    {k:"livraisons",t:"Livraisons attendues",v:S.commandes.filter(b=>["Validé","Reçu partiel"].includes(b.statut)).length,s:"bons validés pas encore reçus"},
+    {k:"dettes",t:"À payer aux fournisseurs",v:fmt(conf.reduce((s,f)=>s+(+f.montant||0),0)),u:"XAF",s:`${conf.length} facture(s) conforme(s)`},
+    {k:"bloquees",t:"Factures bloquées",v:S.factures.filter(f=>f.statut==="Bloquée").length,s:"à vérifier par la logistique",c:S.factures.some(f=>f.statut==="Bloquée")?"warn":"ok"}
+  ];
+}
+function classements(){
+  const parCamion={},parPiece={},parFourn={};
+  S.commandes.filter(engage).forEach(b=>{const k=b.vehicule_id?vName(b.vehicule_id):"Sans camion";parCamion[k]=(parCamion[k]||0)+(+b.total||0)});
+  S.mouvements.filter(m=>m.type==="sortie").forEach(m=>{const k=designation(m.stock_id)||"Pièce";parPiece[k]=(parPiece[k]||0)+m.qte});
+  S.factures.filter(f=>f.statut==="Payée").forEach(f=>{parFourn[f.fournisseur]=(parFourn[f.fournisseur]||0)+(+f.montant||0)});
+  const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  return {camion:top(parCamion),piece:top(parPiece),fourn:top(parFourn)};
+}
 function vBord(){
-  const m=new Date(),m0=new Date(m.getFullYear(),m.getMonth(),1).getTime();
-  const bcM=S.commandes.filter(b=>ts(b.created_at)>=m0&&!["À valider","Refusé"].includes(b.statut));
-  const ouvertes=S.demandes.filter(d=>!["Montée","Refusée"].includes(d.statut)).length;
-  const attente=S.commandes.filter(b=>["Validé","Reçu partiel"].includes(b.statut)).length;
-  const bloq=S.factures.filter(f=>f.statut==="Bloquée").length;
-  const payer=S.factures.filter(f=>f.statut==="Conforme").reduce((s,f)=>s+(+f.montant||0),0);
-  const panne=S.vehicules.filter(v=>v.statut==="En panne").length;
-  const parV={};for(const b of bcM){parV[b.vehicule_id||"—"]=(parV[b.vehicule_id||"—"]||0)+(+b.total||0)}
-  const rows=Object.entries(parV).sort((a,b)=>b[1]-a[1]);
-  return `<div class="stack"><div class="kpis">
-   <div class="kpi"><span>Commandé ce mois</span><b>${fmt(bcM.reduce((s,b)=>s+(+b.total||0),0))}</b><span style="text-transform:none;letter-spacing:0">XAF, ${bcM.length} bon(s) validé(s)</span></div>
-   <div class="kpi"><span>Demandes en cours</span><b>${ouvertes}</b></div>
-   <div class="kpi"><span>Livraisons attendues</span><b>${attente}</b></div>
-   <div class="kpi"><span>Factures bloquées</span><b>${bloq}</b></div>
-   <div class="kpi"><span>À payer (conformes)</span><b>${fmt(payer)}</b><span style="text-transform:none;letter-spacing:0">XAF</span></div>
-   <div class="kpi"><span>Camions en panne</span><b>${panne}</b></div>
-  </div>
-  <div class="panel"><div class="phead"><h2 class="grow">Commandes validées ce mois par camion</h2></div>${rows.length?`<div class="tbl"><table><thead><tr><th>Camion</th><th class="num">Montant</th></tr></thead><tbody>${rows.map(([v,x])=>`<tr><td>${esc(vName(v))}</td><td class="num">${xaf(x)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">Aucune commande validée ce mois.</div>'}</div></div>`;
+  if(zoom) return vZoom();
+  const C=cartesBord(), R=classements();
+  const phrase=[];
+  const av=C.find(c=>c.k==="attente"); if(av.v) phrase.push(`${av.v} bon(s) attendent la validation du DG (${av.s}).`);
+  const pn=C.find(c=>c.k==="panne"); if(pn.v) phrase.push(`${pn.v} camion(s) en panne.`);
+  if(R.camion[0]) phrase.push(`Le camion qui a coûté le plus : ${R.camion[0][0]} (${xaf(R.camion[0][1])}).`);
+  return `<div class="stack">
+   ${phrase.length?`<div class="panel"><div class="db"><b>En bref</b>${phrase.map(p=>`<div>${esc(p)}</div>`).join("")}</div></div>`:""}
+   <div class="kpis">${C.map(c=>`<button class="kpi kbtn${c.c?" k-"+c.c:""}" data-act="zoom" data-k="${c.k}"><span>${esc(c.t)}</span><b>${c.v}${c.u?` <small>${c.u}</small>`:""}</b><em>${esc(c.s)}</em></button>`).join("")}</div>
+   <div class="grid3">
+    <div class="panel"><div class="phead"><h2 class="grow">Camions qui coûtent le plus</h2></div><div class="db">${barres(R.camion,xaf)}</div></div>
+    <div class="panel"><div class="phead"><h2 class="grow">Pièces qui cassent le plus</h2></div><div class="db">${barres(R.piece,v=>v+" montée(s)")}</div></div>
+    <div class="panel"><div class="phead"><h2 class="grow">Fournisseurs les plus payés</h2></div><div class="db">${barres(R.fourn,xaf)}</div></div>
+   </div></div>`;
+}
+function vZoom(){
+  const C=cartesBord().find(c=>c.k===zoom); if(!C){zoom=null;return vBord()}
+  const back=`<button class="back" data-act="zoom" data-k="">← Retour à l'accueil</button>`;
+  const tbl=(head,rows)=>rows.length?`<div class="tbl"><table><thead><tr>${head.map(h=>`<th${h.startsWith("#")?' class="num"':""}>${esc(h.replace(/^#/,""))}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`:'<div class="empty">Rien à afficher.</div>';
+  let txt="",corps="";
+  if(zoom==="depenses"){
+    const mois=[];for(let k=-5;k<=0;k++){const a=debutMois(k),b=debutMois(k+1);mois.push([new Date(a).toLocaleDateString("fr-FR",{month:"short",year:"2-digit"}),S.commandes.filter(x=>engage(x)&&ts(x.valide_le||x.created_at)>=a&&ts(x.valide_le||x.created_at)<b).reduce((s,x)=>s+(+x.total||0),0)])}
+    const [cur,prev]=[mois[5][1],mois[4][1]];
+    txt=prev?(cur>prev?`Ce mois, vous avez engagé ${xaf(cur-prev)} de plus que le mois dernier.`:`Ce mois, vous avez engagé ${xaf(prev-cur)} de moins que le mois dernier.`):`Ce mois, ${xaf(cur)} engagés.`;
+    const list=S.commandes.filter(b=>engage(b)&&ts(b.valide_le||b.created_at)>=debutMois()).sort(newest);
+    corps=`<div class="panel"><div class="phead"><h2 class="grow">Les 6 derniers mois</h2></div><div class="db">${barres(mois,xaf)}</div></div>
+     <div class="panel"><div class="phead"><h2 class="grow">Bons du mois</h2></div>${tbl(["N°","Fournisseur","Camion","#Montant","Statut"],list.map(b=>`<tr class="click" data-act="bc-open" data-id="${b.id}"><td class="ref">${esc(b.num)}</td><td>${esc(b.fournisseur)}</td><td>${esc(vName(b.vehicule_id))}</td><td class="num">${xaf(b.total)}</td><td>${chip("bc",b.statut)}</td></tr>`))}</div>`;
+  }else if(zoom==="attente"){
+    const list=S.commandes.filter(b=>b.statut==="À valider").sort((a,b)=>ts(a.created_at)-ts(b.created_at));
+    txt=list.length?`${list.length} bon(s) attendent. Vert = moins d'un jour, orange = plus d'un jour, rouge = plus de 3 jours (2 h et 8 h si urgent).`:"Rien n'attend la validation du DG.";
+    corps=`<div class="panel">${tbl(["N°","Fournisseur","Camion","#Montant","Attente"],list.map(b=>`<tr class="click" data-act="bc-open" data-id="${b.id}"><td class="ref">${esc(b.num)}</td><td>${esc(b.fournisseur)}</td><td>${esc(vName(b.vehicule_id))}</td><td class="num">${xaf(b.total)}</td><td>${attChip(b.created_at,urgentBc(b))}</td></tr>`))}</div>`;
+  }else if(zoom==="panne"){
+    const list=S.vehicules.filter(v=>v.statut==="En panne").sort(vSort);
+    txt=list.length?`${list.length} camion(s) arrêté(s). Chaque jour d'arrêt coûte au contrat ENI.`:"Aucun camion en panne.";
+    corps=`<div class="panel">${tbl(["Camion","Chauffeur","Demandes en cours"],list.map(v=>`<tr><td class="ref">${esc(vName(v.id))}</td><td>${esc(v.chauffeur||"")}</td><td>${S.demandes.filter(d=>d.vehicule_id===v.id&&!["Montée","Refusée"].includes(d.statut)).map(d=>esc(d.num)+" "+chip("demande",d.statut)).join("<br>")||"—"}</td></tr>`))}</div>`;
+  }else if(zoom==="demandes"){
+    const list=S.demandes.filter(d=>!["Montée","Refusée"].includes(d.statut)).sort((a,b)=>ts(a.created_at)-ts(b.created_at));
+    txt=`${list.length} demande(s) en cours, de la plus ancienne à la plus récente.`;
+    corps=`<div class="panel">${tbl(["N°","Camion","Pièce","Statut","Depuis"],list.map(d=>`<tr><td class="ref">${esc(d.num)}${d.urgent?' <span class="chip bad">Urgent</span>':""}</td><td>${esc(vName(d.vehicule_id))}</td><td>${esc(d.piece||"Voir la photo")} × ${d.qte}</td><td>${chip("demande",d.statut)}</td><td>${attChip(d.created_at,d.urgent,d.statut!=="Nouvelle")}</td></tr>`))}</div>`;
+  }else if(zoom==="livraisons"){
+    const list=S.commandes.filter(b=>["Validé","Reçu partiel"].includes(b.statut)).sort((a,b)=>ts(a.valide_le)-ts(b.valide_le));
+    txt=list.length?"Bons validés par le DG, pas encore livrés en entier à la base.":"Aucune livraison attendue.";
+    corps=`<div class="panel">${tbl(["N°","Fournisseur","Camion","Statut","Validé"],list.map(b=>`<tr class="click" data-act="bc-open" data-id="${b.id}"><td class="ref">${esc(b.num)}</td><td>${esc(b.fournisseur)}</td><td>${esc(vName(b.vehicule_id))}</td><td>${chip("bc",b.statut)}</td><td>${attChip(b.valide_le||b.created_at,urgentBc(b),true)}</td></tr>`))}</div>`;
+  }else if(zoom==="dettes"||zoom==="bloquees"){
+    const st=zoom==="dettes"?"Conforme":"Bloquée";
+    const list=S.factures.filter(f=>f.statut===st).sort(newest);
+    const pf={};list.forEach(f=>pf[f.fournisseur]=(pf[f.fournisseur]||0)+(+f.montant||0));
+    txt=zoom==="dettes"?"Factures contrôlées et conformes : le DG peut les payer.":"Factures bloquées par le contrôle : la logistique doit vérifier les motifs.";
+    corps=`${zoom==="dettes"?`<div class="panel"><div class="phead"><h2 class="grow">Par fournisseur</h2></div><div class="db">${barres(Object.entries(pf).sort((a,b)=>b[1]-a[1]),xaf)}</div></div>`:""}
+     <div class="panel">${tbl(["Facture","Fournisseur","#Montant","Motifs"],list.map(f=>`<tr><td class="ref">${esc(f.numero)}</td><td>${esc(f.fournisseur)}</td><td class="num">${xaf(f.montant)}</td><td>${(f.motifs||[]).map(esc).join("<br>")||"—"}</td></tr>`))}</div>`;
+  }
+  return `<div class="stack">${back}<div class="kpis"><div class="kpi${C.c?" k-"+C.c:""}"><span>${esc(C.t)}</span><b>${C.v}${C.u?` <small>${C.u}</small>`:""}</b><em>${esc(C.s)}</em></div></div>
+   ${txt?`<div class="panel"><div class="db">${esc(txt)}</div></div>`:""}${corps}</div>`;
 }
 
 /* ===== Administration ===== */
@@ -443,7 +515,8 @@ function openBc(id){
 
 /* ---------- Actions ---------- */
 const H={};
-H.tab=d=>{tab=d.k;screen="home";F={};render(true)};
+H.tab=d=>{tab=d.k;screen="home";zoom=null;F={};render(true)};
+H.zoom=d=>{zoom=d.k||null;render(true);window.scrollTo(0,0)};
 H.go=d=>{screen=d.s;F={qte:1};render(true);window.scrollTo(0,0);if(d.s==="recv")charger()};
 H.pick=d=>{if(d.k==="urgent")F.urgent=d.v==="1";else F[d.k]=d.v||null;
   if(d.k==="bc"&&d.v){const b=S.attendues.find(x=>x.id===d.v);if(!b){F.bc=null;return render(true)}(b.lignes||[]).forEach((l,i)=>F["r"+i]=Math.max(0,l.qte-(l.recu||0)))}
