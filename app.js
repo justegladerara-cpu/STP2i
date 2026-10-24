@@ -39,7 +39,7 @@ const attChip=(t,urgent,lent)=>`<span class="chip ${attenteCls(t,urgent,lent)}" 
 
 /* ---------- État ---------- */
 const S={vehicules:[],demandes:[],commandes:[],lignes:[],receptions:[],stock:[],mouvements:[],factures:[],profils:[],journal:[],attendues:[],seuil:0,
-  affectations:[],pannes:[],entretiens:[],entretiens_faits:[],carburant:[],papiers:[],sites:[],stock_sites:[],transferts:[],inventaires:[],fournisseurs:[],jours:[],contrat_prix:[],controles:[],hse:[],formations:[],smq:[],smq_versions:[],rapport_jour:[]};
+  affectations:[],pannes:[],entretiens:[],entretiens_faits:[],carburant:[],papiers:[],sites:[],stock_sites:[],transferts:[],inventaires:[],fournisseurs:[],jours:[],contrat_prix:[],controles:[],hse:[],formations:[],smq:[],smq_versions:[],rapport_jour:[],plan_jour:[],plan_equipes:[],plan_courses:[]};
 // Lien d'un QR collé sur un camion : #camion=CE-01
 let qrCamion=(location.hash.match(/camion=([^&]+)/)||[])[1]||null; if(qrCamion) qrCamion=decodeURIComponent(qrCamion);
 let qrDoc=(location.hash.match(/doc=([^&]+)/)||[])[1]||null; if(qrDoc) qrDoc=decodeURIComponent(qrDoc);
@@ -174,7 +174,10 @@ async function charger(){
       formations:q("stp2i_formations","*","created_at"),
       smq:q("stp2i_smq_documents"),
       smq_versions:q("stp2i_smq_versions","*","remplace_le"),
-      rapport_jour:q("stp2i_rapport_jour","*","jour").limit(2000)
+      rapport_jour:q("stp2i_rapport_jour","*","jour").limit(2000),
+      plan_jour:q("stp2i_plan_jour","*","jour").limit(400),
+      plan_equipes:q("stp2i_plan_equipes").limit(4000),
+      plan_courses:q("stp2i_plan_courses").limit(20000)
     };
     if(direction){
       jobs.commandes=q("stp2i_commandes","*","created_at");
@@ -202,7 +205,7 @@ async function charger(){
   finally{loading=false;if(again){again=false;charger()}}
 }
 // Tables ajoutées par la mise à jour du parc : l'écran reste utilisable si elles manquent.
-const NOUVELLES=["affectations","pannes","entretiens","entretiens_faits","carburant","papiers","sites","stock_sites","transferts","inventaires","fournisseurs","jours","contrat_prix","controles","hse","formations","smq","smq_versions","rapport_jour"];
+const NOUVELLES=["affectations","pannes","entretiens","entretiens_faits","carburant","papiers","sites","stock_sites","transferts","inventaires","fournisseurs","jours","contrat_prix","controles","hse","formations","smq","smq_versions","rapport_jour","plan_jour","plan_equipes","plan_courses"];
 let reloadT;const bientot=()=>{clearTimeout(reloadT);reloadT=setTimeout(charger,400)};
 let canal=null;
 function ecouter(){
@@ -230,7 +233,7 @@ function render(force){
   if(!r){m.innerHTML=`<div class="panel narrow"><div class="phead"><h2>Accès en attente</h2></div><div class="db"><p>Bonjour ${esc(me.nom||"")}. Votre compte existe, mais aucun rôle ne vous a encore été attribué.</p><p class="sub">Demandez à l'administrateur de vous donner un rôle : Chef de base, Logistique ou Direction générale.</p><div><button class="btn" data-act="logout">Se déconnecter</button></div></div></div>`;return}
   const T=tabsFor(r);
   if(!T.find(x=>x[0]===tab)) tab=T[0][0];
-  const VIEWS={base:vBase,demandes:vDemandes,commandes:vCommandes,factures:vFactures,stock:vStock,camions:vCamions,journal:vJournal,valider:vValider,params:vParams,bord:vBord,carburant:vCarburant,papiers:vPapiers,fournisseurs:vFournisseurs,contrat:vContrat,hse:vHse,rapports:vRapports,smq:vSmq,rapjour:vRapJour};
+  const VIEWS={base:vBase,demandes:vDemandes,commandes:vCommandes,factures:vFactures,stock:vStock,camions:vCamions,journal:vJournal,valider:vValider,params:vParams,bord:vBord,carburant:vCarburant,papiers:vPapiers,fournisseurs:vFournisseurs,contrat:vContrat,hse:vHse,rapports:vRapports,smq:vSmq,rapjour:vRapJour,plan:vPlan};
   m.innerHTML=VIEWS[tab]();
 }
 function tabsFor(r){
@@ -238,8 +241,8 @@ function tabsFor(r){
         nF=S.factures.filter(f=>f.statut==="Bloquée").length, nP=S.factures.filter(f=>f.statut==="Conforme").length;
   return ({
     base:[["base","Accueil"],["camions","Camions"],["stock","Stock",S.transferts.filter(t=>t.statut==="En route"&&t.envoye_par!==me.id).length],["hse","HSE"],["smq","Documents HSE"]],
-    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["fournisseurs","Fournisseurs"],["camions","Camions"],["rapjour","Rapport journalier",rjManquants(auj()).length],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
-    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["stock","Stock"],["camions","Camions"],["rapjour","Rapport journalier"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
+    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["fournisseurs","Fournisseurs"],["camions","Camions"],["plan","Plan de travail",ptExiste(auj())?0:1],["rapjour","Rapport journalier",rjManquants(auj()).length],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
+    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["stock","Stock"],["camions","Camions"],["plan","Plan de travail"],["rapjour","Rapport journalier"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
     hse:[["hse","Accueil HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents",smqARevoir().length],["papiers","Papiers",papiersAlerte().length],["camions","Camions"],["rapports","Rapports"],["journal","Journal"]],
     admin:[["params","Comptes et réglages"],["bord","Tableau de bord"],["journal","Journal"]]
   })[r];
@@ -670,6 +673,124 @@ async function rjExcel(){
     ws["!cols"]=[{wch:10},{wch:24},{wch:10},{wch:12},{wch:11},{wch:9},{wch:26},{wch:9},{wch:14},{wch:26},{wch:9},{wch:14},{wch:26},{wch:9},{wch:14},{wch:9},{wch:11},{wch:10}];
     X.utils.book_append_sheet(wb,ws,j.split("-").reverse().join("-"))});
   X.writeFile(wb,"RAPPORT_JOURNALIER_"+mois+".xlsx");
+}
+/* ===== Plan de travail du jour (même structure que le fichier Excel « PLAN DE TRAVAIL ») ===== */
+let ptJour=auj(); const PTD={};   // brouillon du jour : {entete, equipes:{camion:{...}}, courses:[...] }
+const uid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():"xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g,()=>(Math.random()*16|0).toString(16));
+const jourAvant=j=>{const t=new Date(j+"T12:00:00");t.setDate(t.getDate()-1);return t.toISOString().slice(0,10)};
+const ptExiste=j=>S.plan_jour.some(p=>p.jour===j);
+function ptSaved(j){const h=S.plan_jour.find(p=>p.jour===j)||{};const eq={};S.plan_equipes.filter(e=>e.jour===j).forEach(e=>eq[e.vehicule_id]={chauffeur:e.chauffeur,guide:e.guide,telephone:e.telephone,zone:e.zone,en_panne:e.en_panne});
+  return {entete:{notes:h.notes||"",vehicules_attente:h.vehicules_attente||"",agents_attente:h.agents_attente||""},equipes:eq,
+    courses:S.plan_courses.filter(c=>c.jour===j).sort((a,b)=>a.ordre-b.ordre).map(c=>({id:c.id,nom:c.nom,origine:c.origine,vehicule_id:c.vehicule_id||"",faite:c.faite,observation:c.observation}))}}
+const ptEtat=j=>PTD[j]||ptSaved(j);
+const ptEdit=j=>{if(!PTD[j])PTD[j]=JSON.parse(JSON.stringify(ptSaved(j)));return PTD[j]};
+const peutPt=()=>canDo("rapjour");
+function ptMaj(key,v){const P=ptEdit(ptJour);const [t,a,b]=key.split("|");
+  if(t==="h")P.entete[a]=v; else if(t==="e"){(P.equipes[a]=P.equipes[a]||{chauffeur:"",guide:"",telephone:"",zone:"",en_panne:false})[b]=v} else if(t==="c"&&P.courses[+a])P.courses[+a][b]=v}
+function ptDernier(j){return S.plan_jour.map(p=>p.jour).filter(x=>x<j).sort().pop()}
+// Nouveau jour : on reprend les équipes du dernier plan et ses courses non faites (« courses restantes »).
+function ptPreparer(j){const d=ptDernier(j);const src=d?ptSaved(d):{equipes:{},courses:[]};
+  PTD[j]={entete:{notes:"",vehicules_attente:d?ptSaved(d).entete.vehicules_attente:"",agents_attente:""},equipes:JSON.parse(JSON.stringify(src.equipes)),
+    courses:src.courses.filter(c=>!c.faite).map(c=>({id:uid(),nom:c.nom,origine:"Restante",vehicule_id:"",faite:false,observation:c.observation}))};
+  rjVehs().forEach(v=>{if(!PTD[j].equipes[v.id])PTD[j].equipes[v.id]={chauffeur:v.chauffeur||"",guide:"",telephone:"",zone:"",en_panne:v.statut==="En panne"}});}
+function ptStats(P,vs){const par={};vs.forEach(v=>{const c=P.courses.filter(x=>x.vehicule_id===v.id);par[v.id]={prevues:c.length,faites:c.filter(x=>x.faite).length}});
+  const prevues=P.courses.filter(c=>c.vehicule_id).length, faites=P.courses.filter(c=>c.vehicule_id&&c.faite).length;
+  return {par,prevues,faites,restantes:prevues-faites,pct:prevues?Math.round(faites/prevues*100):0,libres:P.courses.filter(c=>!c.vehicule_id)}}
+function vPlan(){
+  const J=ptJour, ed=peutPt(), vs=rjVehs(), existe=ptExiste(J)||!!PTD[J];
+  const P=ptEtat(J), st=ptStats(P,vs), noms=[...new Set(S.plan_courses.map(c=>c.nom))].slice(0,800);
+  const ce=(k,v,ph,w)=>ed?`<input class="pt" data-pt="${k}" value="${esc(v)}" placeholder="${ph||""}"${w?` style="width:${w}"`:""}>`:esc(v)||'<span class="sub">—</span>';
+  const opts=sel=>`<option value="">— pas de camion —</option>`+vs.map(v=>`<option value="${v.id}"${v.id===sel?" selected":""}>${esc(v.immat||v.code)}</option>`).join("");
+  const course=(c,i,affecte)=>`<div class="ptc${c.faite?" fait":""}${c.origine==="Restante"?" rest":""}">
+    ${ed&&affecte?`<input type="checkbox" class="ptf" data-pt="c|${i}|faite"${c.faite?" checked":""} aria-label="Course faite">`:affecte?`<span class="chip ${c.faite?"ok":""}">${c.faite?"Faite":"À faire"}</span>`:""}
+    <span class="grow"><b>${esc(c.nom)}</b>${c.origine==="Restante"?' <span class="chip warn">restante</span>':""}${!ed&&c.observation?`<span class="sub"> · ${esc(c.observation)}</span>`:""}</span>
+    ${ed?`<input class="pt ptobs" data-pt="c|${i}|observation" value="${esc(c.observation)}" placeholder="Observation"><select class="pt" data-pt="c|${i}|vehicule_id" aria-label="Camion">${opts(c.vehicule_id)}</select><button class="btn sm" data-act="pt-suppr" data-i="${i}" aria-label="Retirer">×</button>`:""}</div>`;
+  const head=`<div class="row"><h2 class="grow">Plan de travail</h2>
+    <button class="btn" data-act="pt-jour" data-k="-1" aria-label="Jour précédent">◀</button><input id="pt-jour" type="date" value="${J}" style="width:auto"><button class="btn" data-act="pt-jour" data-k="1" aria-label="Jour suivant">▶</button>
+    <button class="btn" data-act="pt-imprimer">Imprimer / PDF</button><button class="btn" data-act="pt-excel">Exporter le mois en Excel</button>
+    ${ed&&existe?`<button class="btn primary" data-act="pt-save"${PTD[J]?"":" disabled"}>Enregistrer</button>`:""}</div>`;
+  if(!existe) return `<div class="stack">${head}<div class="panel"><div class="db"><div class="empty">Pas encore de plan pour le ${dt(J+"T12:00:00")}.${ed?`<p style="margin-top:12px"><button class="btn primary" data-act="pt-preparer">Préparer le plan de ce jour</button></p><p class="sub">Les équipes du dernier plan et ses courses non faites (courses restantes) sont reprises toutes seules.</p>`:""}</div></div></div></div>`;
+  return `<div class="stack">${head}
+   <div class="kpis">
+    <div class="kpi"><span>Courses prévues</span><b>${st.prevues}</b><em>${st.libres.length?st.libres.length+" sans camion":"toutes ont un camion"}</em></div>
+    <div class="kpi k-ok"><span>Courses faites</span><b>${st.faites}</b><em>${st.restantes} restante(s)</em></div>
+    <div class="kpi${st.pct>=80?" k-ok":st.pct>=50?" k-warn":" k-bad"}"><span>Pourcentage de livraison</span><b>${st.pct} <small>%</small></b><em>faites / prévues</em></div>
+    <div class="kpi${vs.some(v=>(P.equipes[v.id]||{}).en_panne)?" k-bad":""}"><span>Camions en panne</span><b>${vs.filter(v=>(P.equipes[v.id]||{}).en_panne).length}</b><em>${vs.filter(v=>(P.equipes[v.id]||{}).en_panne).map(v=>esc(v.immat||v.code)).join(", ")||"aucun"}</em></div>
+   </div>
+   ${PTD[J]&&ed?'<div class="note warn">Des changements ne sont pas encore enregistrés. Appuyez sur « Enregistrer ».</div>':""}
+   <div class="panel"><div class="phead"><h2 class="grow">Équipes du ${dt(J+"T12:00:00")}</h2></div>
+   <div class="tbl"><table class="ptt"><thead><tr><th></th>${vs.map(v=>`<th class="${(P.equipes[v.id]||{}).en_panne?"panne":""}">${esc(v.immat||v.code)}${v.immat?`<div class="sub">${esc(v.code)}</div>`:""}</th>`).join("")}</tr></thead><tbody>
+    ${[["chauffeur","CHAUFFEUR"],["guide","GUIDE"],["telephone","TÉLÉPHONE"],["zone","ZONE DE TRAVAIL"]].map(([k,l])=>`<tr><th>${l}</th>${vs.map(v=>`<td>${ce("e|"+v.id+"|"+k,(P.equipes[v.id]||{})[k]||"")}</td>`).join("")}</tr>`).join("")}
+    <tr><th>EN PANNE</th>${vs.map(v=>`<td>${ed?`<label class="sub"><input type="checkbox" class="ptf" data-pt="e|${v.id}|en_panne"${(P.equipes[v.id]||{}).en_panne?" checked":""}> en panne</label>`:((P.equipes[v.id]||{}).en_panne?'<span class="chip bad">En panne</span>':"")}</td>`).join("")}</tr>
+   </tbody></table></div></div>
+   <div class="panel"><div class="phead"><h2 class="grow">Liste à livrer et courses restantes</h2><span class="sub">${st.libres.length} sans camion</span></div><div class="db">
+    ${ed?`<div class="row"><textarea id="pt-ajout" rows="3" placeholder="Écrivez les noms à livrer, un par ligne" style="flex:1;min-width:220px"></textarea><div class="stack" style="gap:6px"><select id="pt-ajout-v" aria-label="Camion">${opts("")}</select><button class="btn" data-act="pt-ajouter">Ajouter à la liste</button></div></div>
+    <datalist id="pt-noms">${noms.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>`:""}
+    ${st.libres.length?`<div class="ptlist">${P.courses.map((c,i)=>c.vehicule_id?"":course(c,i,false)).join("")}</div>`:'<div class="sub">Toutes les courses ont un camion.</div>'}
+   </div></div>
+   <div class="vtiles ptcols">${vs.map(v=>{const eq=P.equipes[v.id]||{},s=st.par[v.id];const cs=P.courses.map((c,i)=>[c,i]).filter(([c])=>c.vehicule_id===v.id);
+     return `<div class="vtile t-${eq.en_panne?"bad":s.prevues&&s.faites===s.prevues?"ok":s.prevues?"warn":"off"}"><span class="vt-top"><b>${esc(v.immat||v.code)}</b><span class="chip">${s.faites} / ${s.prevues}</span></span>
+       <span class="vt-l sub">${esc(eq.chauffeur||"")}${eq.guide?" · guide "+esc(eq.guide):""}${eq.zone?"<br>"+esc(eq.zone):""}</span>
+       <div class="ptlist">${cs.length?cs.map(([c,i])=>course(c,i,true)).join(""):'<span class="sub">Aucune course</span>'}</div>
+       <span class="vt-l sub">Restantes : <b>${s.prevues-s.faites}</b></span></div>`}).join("")}</div>
+   <div class="panel"><div class="phead"><h2 class="grow">Bas de page</h2></div><div class="db grid2">
+    <div class="f"><label>Véhicules en attente à la base</label>${ce("h|vehicules_attente",P.entete.vehicules_attente,"ex. 334 D 5 ; 868 AB 5")}</div>
+    <div class="f"><label>Agents en attente</label>${ce("h|agents_attente",P.entete.agents_attente)}</div>
+    <div class="f" style="grid-column:1/-1"><label>Remarques (absences, problèmes)</label>${ce("h|notes",P.entete.notes,"ex. une agente absente, bâche à réparer")}</div>
+   </div></div>
+   ${ptMois(J,vs)}</div>`;
+}
+function ptMois(J,vs){const mois=J.slice(0,7);const jours=S.plan_jour.map(p=>p.jour).filter(j=>j.startsWith(mois)).sort();if(!jours.length) return "";
+  const lignes=jours.map(j=>{const s=ptStats(ptSaved(j),vs);return [j,s]});
+  const P=lignes.reduce((a,[,s])=>a+s.prevues,0),F=lignes.reduce((a,[,s])=>a+s.faites,0);
+  return `<div class="panel"><div class="phead"><h2 class="grow">Le mois : ${P?Math.round(F/P*100):0} % de livraison</h2><span class="sub">${F} faites sur ${P} prévues</span></div><div class="db">${barres(lignes.map(([j,s])=>[j.slice(8,10),s.pct]),v=>v+" %")}</div></div>`}
+function ptDonnees(j){const P=ptSaved(j);return P}
+function ptImprimer(){
+  const J=ptJour;if(!ptExiste(J)){toast("Rien d'enregistré pour ce jour.");return}
+  const vs=rjVehs(),P=ptSaved(J),st=ptStats(P,vs);const max=Math.max(1,...vs.map(v=>st.par[v.id].prevues),P.courses.filter(c=>!c.vehicule_id).length);
+  const rest=P.courses.filter(c=>c.origine==="Restante"),neuf=P.courses.filter(c=>c.origine!=="Restante");const n=Math.max(max,rest.length,neuf.length);
+  const cel=c=>c?`<td class="${c.faite?"fait":""}">${esc(c.nom)}${c.observation?`<br><i>${esc(c.observation)}</i>`:""}</td>`:"<td></td>";
+  const col=v=>P.courses.filter(c=>c.vehicule_id===v.id);
+  imprimer("Plan de travail "+dt(J+"T12:00:00"),`<style>@page{size:A4 landscape;margin:8mm}table{font-size:8.5px}td.fait{background:#d9f2e0}</style><h1>PLAN DE TRAVAIL DU ${dt(J+"T12:00:00")}</h1>
+  <table><thead><tr><th colspan="4"></th>${vs.map(v=>`<th>${esc(v.immat||v.code)}${P.equipes[v.id]&&P.equipes[v.id].en_panne?" (en panne)":""}</th>`).join("")}</tr></thead><tbody>
+  ${[["chauffeur","CHAUFFEUR"],["guide","GUIDE"],["telephone","TÉLÉPHONE"],["zone","ZONE DE TRAVAIL"]].map(([k,l])=>`<tr><th colspan="4">${l}</th>${vs.map(v=>`<td>${esc((P.equipes[v.id]||{})[k]||"")}</td>`).join("")}</tr>`).join("")}
+  <tr><th>N°</th><th>COURSES RESTANTES</th><th>LISTE À LIVRER</th><th>OBSERVATION</th>${vs.map(v=>`<th>${esc(v.immat||v.code)}</th>`).join("")}</tr>
+  ${Array.from({length:n},(_,i)=>`<tr><td>${i+1}</td><td>${esc((rest[i]||{}).nom||"")}</td><td>${esc((neuf[i]||{}).nom||"")}</td><td>${esc(((neuf[i]||{}).observation)||"")}</td>${vs.map(v=>cel(col(v)[i])).join("")}</tr>`).join("")}
+  <tr><th colspan="4">COURSES PRÉVUES</th>${vs.map(v=>`<td>${st.par[v.id].prevues}</td>`).join("")}</tr>
+  <tr><th colspan="4">COURSES FAITES</th>${vs.map(v=>`<td>${st.par[v.id].faites}</td>`).join("")}</tr>
+  <tr><th colspan="4">COURSES RESTANTES</th>${vs.map(v=>`<td>${st.par[v.id].prevues-st.par[v.id].faites}</td>`).join("")}</tr></tbody></table>
+  <p>Total : <b>${st.prevues}</b> prévues · <b>${st.faites}</b> faites · <b>${st.restantes}</b> restantes · <b>Pourcentage de livraison : ${st.pct} %</b></p>
+  <p>Véhicules en attente à la base : ${esc(P.entete.vehicules_attente)} · Agents en attente : ${esc(P.entete.agents_attente)}</p>${P.entete.notes?`<p>Remarques : ${esc(P.entete.notes)}</p>`:""}
+  <p class="sub">Case verte = course faite.</p>`);
+}
+async function ptExcel(){
+  try{await chargerXlsx()}catch(e){toast(errMsg(e));return}
+  const X=window.XLSX,wb=X.utils.book_new(),mois=ptJour.slice(0,7),vs=rjVehs();
+  const jours=S.plan_jour.map(p=>p.jour).filter(j=>j.startsWith(mois)).sort();
+  if(!jours.length){toast("Aucun plan enregistré ce mois-ci.");return}
+  jours.forEach(j=>{const P=ptSaved(j),st=ptStats(P,vs);const col=v=>P.courses.filter(c=>c.vehicule_id===v.id);
+    const rest=P.courses.filter(c=>c.origine==="Restante"),neuf=P.courses.filter(c=>c.origine!=="Restante");
+    const n=Math.max(23,rest.length,neuf.length,...vs.map(v=>col(v).length));const nom=c=>c?(c.faite?"✓ ":"")+c.nom:"";
+    const vide=["","","",""],imm=vs.map(v=>(v.immat||v.code)+((P.equipes[v.id]||{}).en_panne?" (EN PANNE)":""));
+    const aoa=[["PLAN DE TRAVAIL DU "+j.split("-").reverse().join("/")],[],[],[...vide,...imm],
+      ...[["chauffeur","CHAUFFEUR"],["guide","GUIDE"],["telephone","TELEPHONE"],["zone","ZONE DE TRAVAIL"]].map(([k,l])=>[l,"","","",...vs.map(v=>(P.equipes[v.id]||{})[k]||"")]),
+      ["PLAN DE TRAVAIL","COURSES RESTANTES","LISTE A LIVRER","OBSERVATION",...imm,"TOTAL"],
+      ...Array.from({length:n},(_,i)=>[i+1,nom(rest[i]),nom(neuf[i]),(neuf[i]||{}).observation||"",...vs.map(v=>nom(col(v)[i]))]),
+      ["","COURSES PRÉVUES","","",...vs.map(v=>st.par[v.id].prevues),st.prevues],
+      ["","COURSES FAITES","","",...vs.map(v=>st.par[v.id].faites),st.faites],
+      ["","COURSES RESTANTES","","",...vs.map(v=>st.par[v.id].prevues-st.par[v.id].faites),st.restantes],
+      ["","POURCENTAGE DE LIVRAISON","","",st.pct/100],[],
+      ["","VEHICULES EN ATTENTE A LA BASE :","","",P.entete.vehicules_attente],["","AGENTS EN ATTENTE :","","",P.entete.agents_attente],["","REMARQUES :","","",P.entete.notes],[],
+      ["","LÉGENDE : « ✓ » devant un nom = course faite"]];
+    const ws=X.utils.aoa_to_sheet(aoa);ws["!cols"]=[{wch:16},{wch:24},{wch:24},{wch:20},...vs.map(()=>({wch:24})),{wch:8}];
+    ws["!merges"]=[{s:{r:0,c:0},e:{r:1,c:4+vs.length}}];X.utils.book_append_sheet(wb,ws,j.split("-").reverse().join("-"))});
+  X.writeFile(wb,"PLAN_DE_TRAVAIL_"+mois+".xlsx");
+}
+async function ptEnregistrer(){
+  const J=ptJour,P=PTD[J];if(!P) return;
+  const equipes=Object.entries(P.equipes).filter(([vid])=>rjVehs().some(v=>v.id===vid)).map(([vid,e])=>({vehicule_id:vid,...e}));
+  const n=await rpc("stp2i_plan_enregistrer",{p_jour:J,p_entete:P.entete,p_equipes:equipes,p_courses:P.courses});
+  delete PTD[J];toast(`Plan du ${dt(J+"T12:00:00")} enregistré (${n} course(s))`);await charger();
 }
 function basePlein(){
   return `<div class="base"><button class="back" data-act="go" data-s="home">← Retour</button><h2>Plein de carburant</h2>
@@ -1482,7 +1603,14 @@ H["smq-hist"]=d=>{const x=byId("smq",d.id);const vs=S.smq_versions.filter(v=>v.d
 H["smq-export"]=()=>exporterSmq();
 H["rj-jour"]=d=>{const t=new Date(rjJour+"T12:00:00");t.setDate(t.getDate()+(+d.k));const n=t.toISOString().slice(0,10);if(n>auj())return;rjJour=n;render(true)};
 H["rj-save"]=async()=>{try{await rjEnregistrer()}catch(e){toast(typeof e==="string"?e:errMsg(e))}};
-H["rj-imprimer"]=()=>rjImprimer();H["rj-excel"]=()=>rjExcel();
+H["rj-imprimer"]=()=>rjImprimer();
+H["pt-jour"]=d=>{const t=new Date(ptJour+"T12:00:00");t.setDate(t.getDate()+(+d.k));ptJour=t.toISOString().slice(0,10);render(true)};
+H["pt-preparer"]=()=>{ptPreparer(ptJour);render(true)};
+H["pt-save"]=async()=>{try{await ptEnregistrer()}catch(e){toast(typeof e==="string"?e:errMsg(e))}};
+H["pt-imprimer"]=()=>ptImprimer();H["pt-excel"]=()=>ptExcel();
+H["pt-suppr"]=d=>{const P=ptEdit(ptJour);P.courses.splice(+d.i,1);render(true)};
+H["pt-ajouter"]=()=>{const t=$("#pt-ajout");const noms=(t?t.value:"").split(/\n|;/).map(x=>x.trim().replace(/\s+/g," ").toUpperCase()).filter(Boolean);if(!noms.length){toast("Écrivez au moins un nom.");return}
+  const P=ptEdit(ptJour),vid=val("pt-ajout-v");noms.forEach(n=>P.courses.push({id:uid(),nom:n,origine:"À livrer",vehicule_id:vid,faite:false,observation:""}));render(true)};H["rj-excel"]=()=>rjExcel();
 H["rj-base"]=()=>{const J=rjJour;RJD[J]=RJD[J]||{};rjVehs().forEach(v=>{const l=rjLigne(J,v.id);RJ_CHECKS.forEach(([k])=>{if(!l[k+"_lieu"]){(RJD[J][v.id]=RJD[J][v.id]||{})[k+"_lieu"]="stationné à la base";if(!l[k+"_obs"])RJD[J][v.id][k+"_obs"]="RAS"}})});render(true)};
 
 document.addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;if(H[a]){if(el.tagName==="BUTTON"&&el.type!=="submit")e.preventDefault();H[a](el.dataset,el)}});
@@ -1493,6 +1621,7 @@ document.addEventListener("input",e=>{const t=e.target;
   if(t.id&&/^l-[qp]-/.test(t.id))bcTotal();
   if(["sm-s","sm-v"].includes(t.id)){const r=$("#sm-r");if(r&&r.dataset.auto)r.value=prochaineRef(val("sm-c"),val("sm-s"),val("sm-v"))}
   if(t.id==="sm-r")delete t.dataset.auto;
+  if(t.dataset.pt&&t.tagName==="INPUT"&&t.type!=="checkbox"){ptMaj(t.dataset.pt,t.value);const b=document.querySelector('[data-act="pt-save"]');if(b)b.disabled=false}
   if(t.dataset.rj&&t.tagName!=="SELECT"){const [vid,k]=t.dataset.rj.split("|");const J=rjJour;RJD[J]=RJD[J]||{};(RJD[J][vid]=RJD[J][vid]||{})[k]=t.value;
     const c=document.getElementById("rjd-"+vid);if(c)c.textContent=rjDuree(rjLigne(J,vid));const b=document.querySelector('[data-act="rj-save"]');if(b)b.disabled=false}
 });
@@ -1500,6 +1629,8 @@ document.addEventListener("change",async e=>{const t=e.target;
   if(t.id==="viewas"){viewAs=t.value;try{localStorage.setItem("stp2i-viewas",viewAs)}catch(x){}tab=null;screen="home";F={};render(true)}
   if(t.id==="f-dem"){fDem=t.value;render(true)}
   if(t.id==="f-bc"){fBc=t.value;render(true)}
+  if(t.id==="pt-jour"&&t.value){ptJour=t.value;render(true)}
+  if(t.dataset.pt&&(t.tagName==="SELECT"||t.type==="checkbox")){ptMaj(t.dataset.pt,t.type==="checkbox"?t.checked:t.value);render(true)}
   if(t.id==="rj-jour"&&t.value){rjJour=t.value>auj()?auj():t.value;render(true)}
   if(t.dataset.rj&&t.tagName==="SELECT"){const [vid,k]=t.dataset.rj.split("|");const J=rjJour;RJD[J]=RJD[J]||{};(RJD[J][vid]=RJD[J][vid]||{})[k]=t.value;const b=document.querySelector('[data-act="rj-save"]');if(b)b.disabled=false}
   if(t.id==="sm-c"){const r=$("#sm-r");if(r&&r.dataset.auto)r.value=prochaineRef(t.value,val("sm-s"),val("sm-v"))}

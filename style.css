@@ -209,3 +209,18 @@ table.rjt td{padding:4px 4px;vertical-align:middle}
 table.rjt input.rj,table.rjt select.rj{padding:5px 6px;font-size:13px;min-height:0;width:auto}
 table.rjt input[type=time]{width:108px}
 table.rjt tr.rj-vide td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+/* Plan de travail */
+table.ptt th{font-size:11px;text-align:left;white-space:nowrap}
+table.ptt thead th{text-align:center}
+table.ptt th.panne{color:var(--bad)}
+table.ptt input.pt{padding:5px 6px;font-size:13px;min-width:120px}
+.ptcols{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.ptcols .vtile{cursor:default}
+.ptlist{display:flex;flex-direction:column;gap:4px;margin:6px 0;width:100%}
+.ptc{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:13px;text-align:left}
+.ptc.fait{background:var(--ok-soft);border-color:var(--ok)}
+.ptc.fait b{text-decoration:line-through;text-decoration-color:var(--ok)}
+.ptc.rest{border-left:3px solid var(--warn)}
+.ptc input.ptf{width:20px;height:20px;margin:0}
+.ptc input.ptobs{width:120px;padding:4px 6px;font-size:12px}
+.ptc select{width:auto;padding:4px;font-size:12px;max-width:130px}
