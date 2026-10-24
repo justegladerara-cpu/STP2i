@@ -200,3 +200,12 @@ table.cal .vide{color:var(--line)}
 .smq-band{display:flex;align-items:center;gap:12px;justify-content:space-between;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;padding:14px 16px;border-left:5px solid #0f6b6b}
 .smq-band b{display:block;font-size:16px}
 label.btn{display:inline-flex;align-items:center}
+/* Rapport journalier */
+.note{padding:10px 14px;border-radius:10px;font-weight:600}
+.note.warn{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn)}
+table.rjt th{font-size:11px;text-align:center;vertical-align:middle;white-space:normal;min-width:70px}
+table.rjt th.grp{background:var(--brand-soft);border-bottom:1px solid var(--line)}
+table.rjt td{padding:4px 4px;vertical-align:middle}
+table.rjt input.rj,table.rjt select.rj{padding:5px 6px;font-size:13px;min-height:0;width:auto}
+table.rjt input[type=time]{width:108px}
+table.rjt tr.rj-vide td:first-child{box-shadow:inset 3px 0 0 var(--warn)}

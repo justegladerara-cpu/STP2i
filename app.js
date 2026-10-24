@@ -39,7 +39,7 @@ const attChip=(t,urgent,lent)=>`<span class="chip ${attenteCls(t,urgent,lent)}" 
 
 /* ---------- État ---------- */
 const S={vehicules:[],demandes:[],commandes:[],lignes:[],receptions:[],stock:[],mouvements:[],factures:[],profils:[],journal:[],attendues:[],seuil:0,
-  affectations:[],pannes:[],entretiens:[],entretiens_faits:[],carburant:[],papiers:[],sites:[],stock_sites:[],transferts:[],inventaires:[],fournisseurs:[],jours:[],contrat_prix:[],controles:[],hse:[],formations:[],smq:[],smq_versions:[]};
+  affectations:[],pannes:[],entretiens:[],entretiens_faits:[],carburant:[],papiers:[],sites:[],stock_sites:[],transferts:[],inventaires:[],fournisseurs:[],jours:[],contrat_prix:[],controles:[],hse:[],formations:[],smq:[],smq_versions:[],rapport_jour:[]};
 // Lien d'un QR collé sur un camion : #camion=CE-01
 let qrCamion=(location.hash.match(/camion=([^&]+)/)||[])[1]||null; if(qrCamion) qrCamion=decodeURIComponent(qrCamion);
 let qrDoc=(location.hash.match(/doc=([^&]+)/)||[])[1]||null; if(qrDoc) qrDoc=decodeURIComponent(qrDoc);
@@ -72,6 +72,7 @@ const canDo=a=>{
   if(a==="b") return r==="base"&&(real==="base"||real==="admin");
   if(["bc","refuse","facture","recheck","veh","km"].includes(a)) return r==="logistique"&&(real==="logistique"||real==="admin");
   if(a==="admin") return real==="admin"&&r==="admin";
+  if(a==="rapjour") return r==="logistique"&&(real==="logistique"||real==="admin");
   if(a==="papier") return (r==="logistique"&&(real==="logistique"||real==="admin"))||(r==="hse"&&(real==="hse"||real==="admin"));
   if(a==="controle") return ["base","logistique","hse"].includes(r)&&(real===r||real==="admin");
   if(a==="stockop") return ["base","logistique"].includes(r)&&(real===r||real==="admin");
@@ -172,7 +173,8 @@ async function charger(){
       hse:q("stp2i_hse","*","created_at"),
       formations:q("stp2i_formations","*","created_at"),
       smq:q("stp2i_smq_documents"),
-      smq_versions:q("stp2i_smq_versions","*","remplace_le")
+      smq_versions:q("stp2i_smq_versions","*","remplace_le"),
+      rapport_jour:q("stp2i_rapport_jour","*","jour").limit(2000)
     };
     if(direction){
       jobs.commandes=q("stp2i_commandes","*","created_at");
@@ -200,7 +202,7 @@ async function charger(){
   finally{loading=false;if(again){again=false;charger()}}
 }
 // Tables ajoutées par la mise à jour du parc : l'écran reste utilisable si elles manquent.
-const NOUVELLES=["affectations","pannes","entretiens","entretiens_faits","carburant","papiers","sites","stock_sites","transferts","inventaires","fournisseurs","jours","contrat_prix","controles","hse","formations","smq","smq_versions"];
+const NOUVELLES=["affectations","pannes","entretiens","entretiens_faits","carburant","papiers","sites","stock_sites","transferts","inventaires","fournisseurs","jours","contrat_prix","controles","hse","formations","smq","smq_versions","rapport_jour"];
 let reloadT;const bientot=()=>{clearTimeout(reloadT);reloadT=setTimeout(charger,400)};
 let canal=null;
 function ecouter(){
@@ -228,7 +230,7 @@ function render(force){
   if(!r){m.innerHTML=`<div class="panel narrow"><div class="phead"><h2>Accès en attente</h2></div><div class="db"><p>Bonjour ${esc(me.nom||"")}. Votre compte existe, mais aucun rôle ne vous a encore été attribué.</p><p class="sub">Demandez à l'administrateur de vous donner un rôle : Chef de base, Logistique ou Direction générale.</p><div><button class="btn" data-act="logout">Se déconnecter</button></div></div></div>`;return}
   const T=tabsFor(r);
   if(!T.find(x=>x[0]===tab)) tab=T[0][0];
-  const VIEWS={base:vBase,demandes:vDemandes,commandes:vCommandes,factures:vFactures,stock:vStock,camions:vCamions,journal:vJournal,valider:vValider,params:vParams,bord:vBord,carburant:vCarburant,papiers:vPapiers,fournisseurs:vFournisseurs,contrat:vContrat,hse:vHse,rapports:vRapports,smq:vSmq};
+  const VIEWS={base:vBase,demandes:vDemandes,commandes:vCommandes,factures:vFactures,stock:vStock,camions:vCamions,journal:vJournal,valider:vValider,params:vParams,bord:vBord,carburant:vCarburant,papiers:vPapiers,fournisseurs:vFournisseurs,contrat:vContrat,hse:vHse,rapports:vRapports,smq:vSmq,rapjour:vRapJour};
   m.innerHTML=VIEWS[tab]();
 }
 function tabsFor(r){
@@ -236,8 +238,8 @@ function tabsFor(r){
         nF=S.factures.filter(f=>f.statut==="Bloquée").length, nP=S.factures.filter(f=>f.statut==="Conforme").length;
   return ({
     base:[["base","Accueil"],["camions","Camions"],["stock","Stock",S.transferts.filter(t=>t.statut==="En route"&&t.envoye_par!==me.id).length],["hse","HSE"],["smq","Documents HSE"]],
-    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["fournisseurs","Fournisseurs"],["camions","Camions"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
-    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["stock","Stock"],["camions","Camions"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
+    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["fournisseurs","Fournisseurs"],["camions","Camions"],["rapjour","Rapport journalier",rjManquants(auj()).length],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
+    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["stock","Stock"],["camions","Camions"],["rapjour","Rapport journalier"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
     hse:[["hse","Accueil HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents",smqARevoir().length],["papiers","Papiers",papiersAlerte().length],["camions","Camions"],["rapports","Rapports"],["journal","Journal"]],
     admin:[["params","Comptes et réglages"],["bord","Tableau de bord"],["journal","Journal"]]
   })[r];
@@ -578,6 +580,96 @@ function vCarburant(){
      return `<button class="vtile t-${c}" data-act="voir-camion" data-id="${v.id}"><span class="vt-top"><b>${esc(v.code)}</b><span class="chip ${c}">${fmt(l)} L</span></span><span class="jauge"><i class="${c}" style="width:${Math.min(100,Math.round(l/LIMITE_4J*100))}%"></i></span><span class="vt-l sub">${l>LIMITE_4J?`${fmt(l-LIMITE_4J)} L de trop : à vérifier`:`reste ${fmt(LIMITE_4J-l)} L`}</span></button>`}).join("")}</div></div></div>
    <div class="panel"><div class="phead"><h2 class="grow">Litres par mois</h2></div><div class="db">${barres(parMois,v=>fmt(v)+" L")}</div></div>
    <div class="panel"><div class="phead"><h2 class="grow">Pleins</h2></div>${list.length?`<div class="tbl"><table><thead><tr><th>Date</th><th>Camion</th><th class="num">Litres</th><th class="num">Prix/L</th><th class="num">Montant</th><th class="num">Km</th><th>Station / facture</th><th>Par</th><th>Photo</th></tr></thead><tbody>${list.map(c=>`<tr><td>${dt(c.fait_le)}</td><td class="ref">${esc(vName(c.vehicule_id))}</td><td class="num">${fmt(c.litres)}</td><td class="num">${fmt(c.prix_litre)}</td><td class="num">${xaf(c.montant)}</td><td class="num">${c.km?fmt(c.km):""}</td><td>${esc(c.fournisseur)}${c.facture_num?`<div class="sub">${esc(c.facture_num)}</div>`:""}</td><td>${esc(who(c.created_by))}</td><td>${thumb(c.photo,"Ticket")}</td></tr>`).join("")}</tbody></table></div>`:'<div class="empty">Aucun plein noté. Chaque plein se note avec le ticket ou la facture de la station.</div>'}</div></div>`;
+}
+/* ===== Rapport journalier IVMS (même structure que le fichier Excel « RAPPORT JOURNALIER ») ===== */
+const RJ_CHECKS=[["c1","Check N°1 (Fin 08h30)","08:30"],["c2","Check N°2 (Fin 12h00)","12:00"],["c3","Check N°3 (Fin 16h30)","16:30"]];
+const RJ_LIEUX=["stationné à la base","se trouve à la BI","se trouve en ville","stationné à GPGOS","en route"], RJ_OBS=["RAS","stationné","en mouvement"];
+const auj=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+let rjJour=auj(); const RJD={};   // brouillons non enregistrés : RJD[jour][camion][champ]
+const hm=t=>t?String(t).slice(0,5):"";
+const minutes=t=>{if(!t) return null;const [h,m]=String(t).split(":").map(Number);return h*60+(m||0)};
+function rjDuree(l){const d=minutes(l.demarrage),f=minutes(l.fin),p=minutes(l.pause)||0;if(d===null||f===null||f<=d) return "";const x=f-d-p;return x<0?"":String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0")}
+const rjVehs=()=>[...S.vehicules].filter(v=>v.statut!=="Hors parc").sort(vSort);
+const rjSaved=(jour,vid)=>S.rapport_jour.find(r=>r.jour===jour&&r.vehicule_id===vid);
+function rjLigne(jour,vid){const s=rjSaved(jour,vid)||{};const d=(RJD[jour]||{})[vid]||{};
+  const l={km:s.km??"",infraction:s.infraction||"NON",demarrage:hm(s.demarrage),ivms_ok:s.ivms_ok===undefined?true:s.ivms_ok,pause:hm(s.pause),fin:hm(s.fin)};
+  RJ_CHECKS.forEach(([k,,h])=>{l[k+"_lieu"]=s[k+"_lieu"]||"";l[k+"_heure"]=hm(s[k+"_heure"])||h;l[k+"_obs"]=s[k+"_obs"]||""});
+  Object.assign(l,d);if(typeof l.ivms_ok==="string")l.ivms_ok=l.ivms_ok==="OK";return l}
+const rjModifie=jour=>Object.keys(RJD[jour]||{}).length>0;
+const rjManquants=jour=>rjVehs().filter(v=>!rjSaved(jour,v.id));
+const peutRj=()=>canDo("rapjour");
+function vRapJour(){
+  const vs=rjVehs(), ed=peutRj(), J=rjJour, lignes=vs.map(v=>[v,rjLigne(J,v.id)]);
+  const faits=vs.filter(v=>rjSaved(J,v.id)).length, km=lignes.reduce((a,[,l])=>a+(+String(l.km).replace(",",".")||0),0);
+  const ivmsKo=lignes.filter(([,l])=>!l.ivms_ok), infr=lignes.filter(([,l])=>l.infraction&&l.infraction.toUpperCase()!=="NON");
+  const inp=(vid,k,v,t="text",w="",list="")=>ed?`<input class="rj" data-rj="${vid}|${k}" type="${t}" value="${esc(v)}"${w?` style="width:${w}"`:""}${list?` list="${list}"`:""}${k==="km"?' inputmode="decimal"':""} aria-label="${k}">`:esc(v);
+  const m0=new Date(J.slice(0,7)+"-01T00:00:00"), m1=new Date(m0.getFullYear(),m0.getMonth()+1,1);
+  const duMois=S.rapport_jour.filter(r=>{const t=new Date(r.jour+"T00:00:00").getTime();return t>=m0.getTime()&&t<m1.getTime()});
+  return `<div class="stack">
+   <div class="row"><h2 class="grow">Rapport journalier</h2>
+    <button class="btn" data-act="rj-jour" data-k="-1" aria-label="Jour précédent">◀</button><input id="rj-jour" type="date" value="${J}" max="${auj()}" style="width:auto"><button class="btn" data-act="rj-jour" data-k="1" aria-label="Jour suivant"${J>=auj()?" disabled":""}>▶</button>
+    <button class="btn" data-act="rj-imprimer">Imprimer / PDF</button><button class="btn" data-act="rj-excel">Exporter le mois en Excel</button>
+    ${ed?`<button class="btn primary" data-act="rj-save"${rjModifie(J)?"":" disabled"}>Enregistrer</button>`:""}</div>
+   <div class="kpis">
+    <div class="kpi${faits<vs.length?" k-warn":" k-ok"}"><span>Camions saisis</span><b>${faits} <small>/ ${vs.length}</small></b><em>${faits<vs.length?"il reste "+(vs.length-faits)+" camion(s)":"rapport complet"}</em></div>
+    <div class="kpi"><span>Km parcourus</span><b>${nb(km)} <small>km</small></b><em>tous les camions, ce jour</em></div>
+    <div class="kpi${ivmsKo.length?" k-bad":" k-ok"}"><span>IVMS en panne</span><b>${ivmsKo.length}</b><em>${ivmsKo.length?ivmsKo.map(([v])=>esc(v.code)).join(", "):"tous fonctionnent"}</em></div>
+    <div class="kpi${infr.length?" k-bad":" k-ok"}"><span>Infractions jour précédent</span><b>${infr.length}</b><em>${infr.length?infr.map(([v])=>esc(v.code)).join(", "):"aucune"}</em></div>
+   </div>
+   ${rjModifie(J)?'<div class="note warn">Des changements ne sont pas encore enregistrés. Appuyez sur « Enregistrer ».</div>':""}
+   <div class="panel"><div class="phead"><h2 class="grow">Rapport du ${dt(J+"T12:00:00")}</h2>${ed?'<button class="btn sm" data-act="rj-base">Cases vides : « stationné à la base / RAS »</button>':""}</div>
+   <div class="tbl"><table class="rjt"><thead>
+    <tr><th rowspan="2">N°</th><th rowspan="2">Immatriculation</th><th rowspan="2">KM parcourus</th><th rowspan="2">Infractions jour précédent</th><th rowspan="2">Heure de démarrage du conducteur</th><th rowspan="2">IVMS fonctionnel</th>${RJ_CHECKS.map(([,t])=>`<th colspan="3" class="grp">${t}<br><small>Opérateur IVMS (STP2I)</small></th>`).join("")}<th colspan="3" class="grp">Check N°4 (le lendemain)<br><small>Opérateur IVMS (STP2I)</small></th></tr>
+    <tr>${RJ_CHECKS.map(()=>"<th>Emplacement actuel</th><th>Heure de contrôle</th><th>Observation</th>").join("")}<th>Heure de pause</th><th>Heure de fin de service du chauffeur</th><th>Durée de travail</th></tr></thead><tbody>
+    ${lignes.map(([v,l],i)=>`<tr class="${rjSaved(J,v.id)?"":"rj-vide"}"><td class="num">${i+1}</td><td><b>${esc(v.code)}</b>${v.immat||v.marque?`<div class="sub">${esc([v.immat,v.marque].filter(Boolean).join(" "))}</div>`:""}</td>
+     <td>${inp(v.id,"km",l.km,"text","70px")}</td><td>${inp(v.id,"infraction",l.infraction,"text","80px","rj-inf")}</td><td>${inp(v.id,"demarrage",l.demarrage,"time")}</td>
+     <td>${ed?`<select class="rj" data-rj="${v.id}|ivms_ok" aria-label="IVMS"><option${l.ivms_ok?" selected":""}>OK</option><option value="NON"${l.ivms_ok?"":" selected"}>Non</option></select>`:(l.ivms_ok?"OK":'<span class="chip bad">Non</span>')}</td>
+     ${RJ_CHECKS.map(([k])=>`<td>${inp(v.id,k+"_lieu",l[k+"_lieu"],"text","150px","rj-lieux")}</td><td>${inp(v.id,k+"_heure",l[k+"_heure"],"time")}</td><td>${inp(v.id,k+"_obs",l[k+"_obs"],"text","110px","rj-obs")}</td>`).join("")}
+     <td>${inp(v.id,"pause",l.pause,"time")}</td><td>${inp(v.id,"fin",l.fin,"time")}</td><td class="num"><b id="rjd-${v.id}">${rjDuree(l)}</b></td></tr>`).join("")}
+   </tbody></table></div>
+   <datalist id="rj-inf"><option value="NON"><option value="OUI"></datalist>
+   <datalist id="rj-lieux">${[...new Set([...RJ_LIEUX,...S.rapport_jour.flatMap(r=>[r.c1_lieu,r.c2_lieu,r.c3_lieu]).filter(Boolean)])].slice(0,40).map(x=>`<option value="${esc(x)}">`).join("")}</datalist>
+   <datalist id="rj-obs">${RJ_OBS.map(x=>`<option value="${x}">`).join("")}</datalist>
+   <div class="db sub">Durée de travail = heure de fin de service − heure de pause − heure de démarrage. Le check N°4 se remplit le lendemain : revenez sur ce jour avec ◀.</div></div>
+   <div class="panel"><div class="phead"><h2 class="grow">Le mois de ${m0.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</h2><span class="sub">${new Set(duMois.map(r=>r.jour)).size} jour(s) de rapport</span></div>
+   <div class="tbl"><table><thead><tr><th>Camion</th><th class="num">Km parcourus</th><th class="num">Jours roulés</th><th class="num">Jours IVMS en panne</th><th class="num">Infractions</th><th class="num">Durée moyenne de travail</th></tr></thead><tbody>
+   ${vs.map(v=>{const r=duMois.filter(x=>x.vehicule_id===v.id);const k=r.reduce((a,x)=>a+(+x.km||0),0);const ds=r.map(x=>minutes(rjDuree({demarrage:hm(x.demarrage),fin:hm(x.fin),pause:hm(x.pause)}))).filter(x=>x);const moy=ds.length?Math.round(ds.reduce((a,b)=>a+b,0)/ds.length):0;
+     return `<tr><td><b>${esc(v.code)}</b> <span class="sub">${esc(v.immat||"")}</span></td><td class="num">${nb(k)}</td><td class="num">${r.filter(x=>+x.km>0).length}</td><td class="num">${r.filter(x=>!x.ivms_ok).length||""}</td><td class="num">${r.filter(x=>x.infraction&&x.infraction.toUpperCase()!=="NON").length||""}</td><td class="num">${moy?Math.floor(moy/60)+" h "+String(moy%60).padStart(2,"0"):"—"}</td></tr>`}).join("")}
+   </tbody></table></div></div></div>`;
+}
+async function rjEnregistrer(){
+  const J=rjJour, d=RJD[J]||{};
+  const lignes=Object.keys(d).map(vid=>{const l=rjLigne(J,vid);const o={vehicule_id:vid};
+    ["km","infraction","demarrage","pause","fin",...RJ_CHECKS.flatMap(([k])=>[k+"_lieu",k+"_heure",k+"_obs"])].forEach(f=>o[f]=String(l[f]??"").trim());
+    o.km=o.km.replace(",",".");if(o.km&&isNaN(+o.km)) throw "Km incorrect pour "+vName(vid)+" : écrivez un nombre (ex. 41,56).";
+    o.ivms_ok=!!l.ivms_ok;return o});
+  if(!lignes.length) return;
+  const n=await rpc("stp2i_rapport_jour_enregistrer",{p_jour:J,p_lignes:lignes});
+  delete RJD[J];toast(`Rapport du ${dt(J+"T12:00:00")} enregistré (${n} camion(s))`);await charger();
+}
+function rjLignesSaved(jour){return rjVehs().map(v=>[v,rjSaved(jour,v.id)]).filter(([,r])=>r)}
+const rjRow=(i,v,r)=>[i,[v.immat,v.marque].filter(Boolean).join(" ")||v.code,r.km==null?"":nb(r.km),r.infraction,hm(r.demarrage),r.ivms_ok?"OK":"NON",...RJ_CHECKS.flatMap(([k])=>[r[k+"_lieu"],hm(r[k+"_heure"]),r[k+"_obs"]]),hm(r.pause),hm(r.fin),rjDuree({demarrage:hm(r.demarrage),fin:hm(r.fin),pause:hm(r.pause)})];
+function rjImprimer(){
+  const J=rjJour, L=rjLignesSaved(J);if(!L.length){toast("Rien d'enregistré pour ce jour.");return}
+  imprimer("Rapport journalier "+dt(J+"T12:00:00"),`<style>@page{size:A4 landscape;margin:8mm}table{font-size:8.5px}th{font-size:8px}</style><h1>RAPPORT JOURNALIER IVMS</h1><p>${esc(reglages.societe||"STP2i")} · Journée du <b>${dt(J+"T12:00:00")}</b> · Nombre de véhicules en contrat : <b>${rjVehs().length}</b></p>
+  <table><thead><tr><th rowspan="2">N°</th><th rowspan="2">Immatriculation</th><th rowspan="2">KM parcourus</th><th rowspan="2">Infractions jour précédent</th><th rowspan="2">Heure de démarrage</th><th rowspan="2">IVMS fonctionnel</th>${RJ_CHECKS.map(([,t])=>`<th colspan="3">${t}</th>`).join("")}<th colspan="3">Check N°4 (le lendemain)</th></tr>
+  <tr>${RJ_CHECKS.map(()=>"<th>Emplacement actuel</th><th>Heure</th><th>Observation</th>").join("")}<th>Heure de pause</th><th>Fin de service</th><th>Durée de travail</th></tr></thead>
+  <tbody>${L.map(([v,r],i)=>`<tr>${rjRow(i+1,v,r).map(c=>`<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table><p>Opérateur IVMS : ${esc(me.nom||"")}</p>`);
+}
+async function rjExcel(){
+  try{await chargerXlsx()}catch(e){toast(errMsg(e));return}
+  const X=window.XLSX, wb=X.utils.book_new(), mois=rjJour.slice(0,7);
+  const jours=[...new Set(S.rapport_jour.filter(r=>r.jour.startsWith(mois)).map(r=>r.jour))].sort();
+  if(!jours.length){toast("Aucun rapport enregistré ce mois-ci.");return}
+  const h1=["Nombre de véhicules en contrat","Immatriculation","KM PARCOURUS","INFRACTIONS JOUR PRECEDENT","heure de démarage du conducteur","IVMS fonctionnel",...RJ_CHECKS.flatMap(([,t])=>[t+"\nOpérateur IVMS (STP2I)","",""]),"Check N°4 (le lendemain)\nOpérateur IVMS (STP2I)","",""];
+  const h2=["","","","","","",...RJ_CHECKS.flatMap(()=>["Emplacement actuel","heure de contrôle","Observation"]),"heure de pause","heure de fin de service du chauffeur","La durée de travail"];
+  jours.forEach(j=>{const rows=rjLignesSaved(j).map(([v,r],i)=>rjRow(i?"":rjVehs().length,v,r));
+    const ws=X.utils.aoa_to_sheet([["RAPPORT JOURNALIER IVMS du "+j.split("-").reverse().join("/")],[],h1,h2,...rows]);
+    ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:17}},...[0,1,2,3,4,5].map(c=>({s:{r:2,c},e:{r:3,c}})),{s:{r:2,c:6},e:{r:2,c:8}},{s:{r:2,c:9},e:{r:2,c:11}},{s:{r:2,c:12},e:{r:2,c:14}},{s:{r:2,c:15},e:{r:2,c:17}}];
+    if(rows.length>1) ws["!merges"].push({s:{r:4,c:0},e:{r:3+rows.length,c:0}});
+    ws["!cols"]=[{wch:10},{wch:24},{wch:10},{wch:12},{wch:11},{wch:9},{wch:26},{wch:9},{wch:14},{wch:26},{wch:9},{wch:14},{wch:26},{wch:9},{wch:14},{wch:9},{wch:11},{wch:10}];
+    X.utils.book_append_sheet(wb,ws,j.split("-").reverse().join("-"))});
+  X.writeFile(wb,"RAPPORT_JOURNALIER_"+mois+".xlsx");
 }
 function basePlein(){
   return `<div class="base"><button class="back" data-act="go" data-s="home">← Retour</button><h2>Plein de carburant</h2>
@@ -1388,6 +1480,10 @@ H["smq-remettre"]=async d=>{try{await rpc("stp2i_smq_archiver",{p_id:d.id,p_acti
 H["smq-hist"]=d=>{const x=byId("smq",d.id);const vs=S.smq_versions.filter(v=>v.document_id===x.id).sort((a,b)=>ts(b.remplace_le)-ts(a.remplace_le));
   openDlg("Versions : "+x.intitule,`<div class="tbl"><table><thead><tr><th>Version</th><th>Date</th><th>Objet</th><th>Fichier</th><th>Remplacée le</th></tr></thead><tbody><tr><td><b>${esc(x.version)}</b> (actuelle)</td><td>${dt(derniereMaj(x))}</td><td>${esc(x.objet_maj)}</td><td>${thumb(x.fichier,x.intitule)}</td><td></td></tr>${vs.map(v=>`<tr><td>${esc(v.version)}</td><td>${dt(v.date_maj)}</td><td>${esc(v.objet_maj)}</td><td>${thumb(v.fichier,v.version)}</td><td>${dt(v.remplace_le)} · ${esc(who(v.remplace_par))}</td></tr>`).join("")}</tbody></table></div>`,null,null)};
 H["smq-export"]=()=>exporterSmq();
+H["rj-jour"]=d=>{const t=new Date(rjJour+"T12:00:00");t.setDate(t.getDate()+(+d.k));const n=t.toISOString().slice(0,10);if(n>auj())return;rjJour=n;render(true)};
+H["rj-save"]=async()=>{try{await rjEnregistrer()}catch(e){toast(typeof e==="string"?e:errMsg(e))}};
+H["rj-imprimer"]=()=>rjImprimer();H["rj-excel"]=()=>rjExcel();
+H["rj-base"]=()=>{const J=rjJour;RJD[J]=RJD[J]||{};rjVehs().forEach(v=>{const l=rjLigne(J,v.id);RJ_CHECKS.forEach(([k])=>{if(!l[k+"_lieu"]){(RJD[J][v.id]=RJD[J][v.id]||{})[k+"_lieu"]="stationné à la base";if(!l[k+"_obs"])RJD[J][v.id][k+"_obs"]="RAS"}})});render(true)};
 
 document.addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;if(H[a]){if(el.tagName==="BUTTON"&&el.type!=="submit")e.preventDefault();H[a](el.dataset,el)}});
 document.addEventListener("input",e=>{const t=e.target;
@@ -1397,11 +1493,15 @@ document.addEventListener("input",e=>{const t=e.target;
   if(t.id&&/^l-[qp]-/.test(t.id))bcTotal();
   if(["sm-s","sm-v"].includes(t.id)){const r=$("#sm-r");if(r&&r.dataset.auto)r.value=prochaineRef(val("sm-c"),val("sm-s"),val("sm-v"))}
   if(t.id==="sm-r")delete t.dataset.auto;
+  if(t.dataset.rj&&t.tagName!=="SELECT"){const [vid,k]=t.dataset.rj.split("|");const J=rjJour;RJD[J]=RJD[J]||{};(RJD[J][vid]=RJD[J][vid]||{})[k]=t.value;
+    const c=document.getElementById("rjd-"+vid);if(c)c.textContent=rjDuree(rjLigne(J,vid));const b=document.querySelector('[data-act="rj-save"]');if(b)b.disabled=false}
 });
 document.addEventListener("change",async e=>{const t=e.target;
   if(t.id==="viewas"){viewAs=t.value;try{localStorage.setItem("stp2i-viewas",viewAs)}catch(x){}tab=null;screen="home";F={};render(true)}
   if(t.id==="f-dem"){fDem=t.value;render(true)}
   if(t.id==="f-bc"){fBc=t.value;render(true)}
+  if(t.id==="rj-jour"&&t.value){rjJour=t.value>auj()?auj():t.value;render(true)}
+  if(t.dataset.rj&&t.tagName==="SELECT"){const [vid,k]=t.dataset.rj.split("|");const J=rjJour;RJD[J]=RJD[J]||{};(RJD[J][vid]=RJD[J][vid]||{})[k]=t.value;const b=document.querySelector('[data-act="rj-save"]');if(b)b.disabled=false}
   if(t.id==="sm-c"){const r=$("#sm-r");if(r&&r.dataset.auto)r.value=prochaineRef(t.value,val("sm-s"),val("sm-v"))}
   if(t.dataset.role!==undefined&&t.dataset.role){const p=byId("profils",t.dataset.role);
     try{await rpc("stp2i_definir_role",{p_user:p.id,p_role:t.value||null,p_actif:p.actif});toast("Rôle enregistré");charger()}catch(x){toast(errMsg(x));render(true)}}
