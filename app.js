@@ -214,7 +214,8 @@ function vLogin(){
    <div class="f"><label for="lg-pw">Mot de passe</label><input id="lg-pw" class="bigin" type="password" autocomplete="current-password"></div>
    ${F.err?`<div class="err">${esc(F.err)}</div>`:""}
    <button class="send" type="submit" ${F.busy?"disabled":""}>${F.busy?"Connexion…":"Se connecter"}</button>
-   <p class="sub">Votre identifiant vous a été remis par l'administrateur (par exemple : gloria). Mot de passe oublié : demandez-lui de le changer.</p></div></form>`;
+   <p class="sub">Votre identifiant vous a été remis par l'administrateur (par exemple : gloria). Mot de passe oublié : demandez-lui de le changer.</p>
+   <p class="sub">Aucun compte administrateur encore ? <button type="button" class="btn sm" data-act="vers-setup">Premier démarrage</button></p></div></form>`;
 }
 function vSetup(){
   return `<form class="panel narrow" id="f-setup" novalidate><div class="phead"><h2>Premier démarrage</h2></div><div class="db">
@@ -223,7 +224,8 @@ function vSetup(){
    <div class="f"><label for="su-id">Identifiant</label><input id="su-id" autocapitalize="none" placeholder="ex. admin"></div>
    <div class="f"><label for="su-pw">Mot de passe (6 caractères minimum)</label><input id="su-pw" type="password" autocomplete="new-password"></div>
    ${F.err?`<div class="err">${esc(F.err)}</div>`:""}
-   <button class="send" type="submit" ${F.busy?"disabled":""}>${F.busy?"Création…":"Créer l'administrateur"}</button></div></form>`;
+   <button class="send" type="submit" ${F.busy?"disabled":""}>${F.busy?"Création…":"Créer l'administrateur"}</button>
+   <div><button type="button" class="btn sm" data-act="vers-login">← Retour à la connexion</button></div></div></form>`;
 }
 
 /* ===== BASE ===== */
@@ -454,6 +456,9 @@ H.view=async d=>{const p=d.p;await signer([p]);const u=urlCache[p];if(!u){toast(
   $("#lbopen").href=u;$("#lbb").innerHTML=isImgPath(p)?`<img src="${esc(u)}" alt="Document">`:'<p>Ce document est un fichier PDF. Utilisez le bouton « Ouvrir ».</p>';$("#lightbox").showModal()};
 H["dlg-cancel"]=()=>$("#dlg").close();
 H.logout=async()=>{await sb.auth.signOut();};
+// Premier démarrage : le serveur refuse si un administrateur existe déjà.
+H["vers-setup"]=()=>{F={};boot="setup";render(true)};
+H["vers-login"]=()=>{F={};boot="login";render(true)};
 async function action(fn,okMsg){F.busy=true;F.err="";render(true);
   try{const r=await fn();screen="home";F={};toast(typeof okMsg==="function"?okMsg(r):okMsg);charger();render(true)}
   catch(e){F.busy=false;F.err=errMsg(e);render(true)}}
@@ -567,7 +572,7 @@ document.addEventListener("focusout",()=>{if(pending)setTimeout(()=>{if(pending)
 async function demarrer(session){
   if(!session){
     me=null;F={};tab=null;screen="home";
-    boot="login";render(true);return; // l'administrateur existe déjà : plus d'écran de premier démarrage
+    boot="login";render(true);return; // écran « Premier démarrage » accessible par un bouton
   }
   try{me=await rpc("stp2i_mon_profil")}catch(e){boot="login";F={err:errMsg(e)};render(true);return}
   boot="ready";F={};render(true);
