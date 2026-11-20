@@ -1,4 +1,4 @@
-/* STP2i Achats et Parc : interface web.
+/* STP2i Facturation (ancien « Achats et Parc ») : interface web.
    Les règles (qui peut faire quoi, contrôle des factures, numérotation, journal)
    sont appliquées par la base de données. Cette page ne fait qu'afficher et appeler ces règles. */
 (function(){
@@ -232,6 +232,7 @@ function render(force){
   if(!me||!me.actif){m.innerHTML=`<div class="panel narrow"><div class="phead"><h2>Compte désactivé</h2></div><div class="db"><p>Ce compte n'a plus accès à l'application. Contactez l'administrateur.</p><div><button class="btn" data-act="logout">Se déconnecter</button></div></div></div>`;return}
   if(!r){m.innerHTML=`<div class="panel narrow"><div class="phead"><h2>Accès en attente</h2></div><div class="db"><p>Bonjour ${esc(me.nom||"")}. Votre compte existe, mais aucun rôle ne vous a encore été attribué.</p><p class="sub">Demandez à l'administrateur de vous donner un rôle : Chef de base, Logistique ou Direction générale.</p><div><button class="btn" data-act="logout">Se déconnecter</button></div></div></div>`;return}
   const T=tabsFor(r);
+  if(!T.length){m.innerHTML=`<div class="panel narrow"><div class="phead"><h2>Écran non disponible</h2></div><div class="db"><p>L'application sert maintenant seulement aux factures. Votre rôle n'y a plus d'écran.</p><p class="sub">Demandez à l'administrateur de vous donner un autre rôle si besoin.</p><div><button class="btn" data-act="logout">Se déconnecter</button></div></div></div>`;return}
   if(!T.find(x=>x[0]===tab)) tab=T[0][0];
   const VIEWS={base:vBase,demandes:vDemandes,commandes:vCommandes,factures:vFactures,stock:vStock,camions:vCamions,journal:vJournal,valider:vValider,params:vParams,bord:vBord,carburant:vCarburant,papiers:vPapiers,fournisseurs:vFournisseurs,contrat:vContrat,hse:vHse,rapports:vRapports,smq:vSmq,rapjour:vRapJour,plan:vPlan};
   m.innerHTML=VIEWS[tab]();
@@ -240,10 +241,12 @@ function tabsFor(r){
   const nD=S.demandes.filter(d=>d.statut==="Nouvelle").length, nV=S.commandes.filter(b=>b.statut==="À valider").length,
         nF=S.factures.filter(f=>f.statut==="Bloquée").length, nP=S.factures.filter(f=>f.statut==="Conforme").length;
   return ({
-    base:[["base","Accueil"],["camions","Camions"],["stock","Stock",S.transferts.filter(t=>t.statut==="En route"&&t.envoye_par!==me.id).length],["hse","HSE"],["smq","Documents HSE"]],
-    logistique:[["bord","Accueil"],["demandes","Demandes",nD],["commandes","Bons de commande"],["factures","Factures",nF],["stock","Stock"],["fournisseurs","Fournisseurs"],["camions","Camions"],["plan","Plan de travail",ptExiste(auj())?0:1],["rapjour","Rapport journalier",rjManquants(auj()).length],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
-    dg:[["bord","Accueil"],["valider","À valider",nV],["factures","Factures à payer",nP],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["stock","Stock"],["camions","Camions"],["plan","Plan de travail"],["rapjour","Rapport journalier"],["carburant","Carburant"],["papiers","Papiers",papiersAlerte().length],["contrat","Contrat ENI"],["hse","HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents HSE"],["rapports","Rapports"],["journal","Journal"]],
-    hse:[["hse","Accueil HSE",S.hse.filter(h=>h.statut==="Ouvert").length],["smq","Documents",smqARevoir().length],["papiers","Papiers",papiersAlerte().length],["camions","Camions"],["rapports","Rapports"],["journal","Journal"]],
+    // Version « Facturation seulement » (20/11/2026) : les autres écrans sont cachés, pas effacés.
+    // Pour les remettre, voir brain.txt et l'historique git (commit d6b2494).
+    base:[["base","Accueil"]],
+    logistique:[["bord","Accueil"],["factures","Factures",nF],["commandes","Bons de commande"],["demandes","Demandes",nD],["fournisseurs","Fournisseurs"],["journal","Journal"]],
+    dg:[["bord","Accueil"],["factures","Factures à payer",nP],["valider","À valider",nV],["commandes","Bons de commande"],["fournisseurs","Fournisseurs"],["journal","Journal"]],
+    hse:[],
     admin:[["params","Comptes et réglages"],["bord","Tableau de bord"],["journal","Journal"]]
   })[r];
 }
@@ -251,7 +254,7 @@ function renderHeader(){
   let h="";
   if(boot==="ready"&&me){
     h+=`<span id="sync">${esc(syncTxt)}</span><span>${esc(me.nom||"")}</span>`;
-    if(me.role==="admin") h+=`<select id="viewas" aria-label="Écran affiché" style="width:auto">${["admin","base","logistique","dg","hse"].map(k=>`<option value="${k}"${k===viewAs?" selected":""}>${k==="admin"?"Administration":"Écran : "+ROLES[k]}</option>`).join("")}</select>`;
+    if(me.role==="admin") h+=`<select id="viewas" aria-label="Écran affiché" style="width:auto">${["admin","base","logistique","dg"].map(k=>`<option value="${k}"${k===viewAs?" selected":""}>${k==="admin"?"Administration":"Écran : "+ROLES[k]}</option>`).join("")}</select>`;
     else if(me.role) h+=`<span class="role">${esc(ROLES[me.role])}</span>`;
     h+=`<button class="btn sm" data-act="logout">Déconnexion</button>`;
   }
@@ -287,23 +290,18 @@ function vSetup(){
 function vBase(){
   if(screen==="new") return baseNew();
   if(screen==="recv") return baseRecv();
-  if(screen==="mount") return baseMount();
-  if(screen==="panne") return basePanne();
-  if(screen==="plein") return basePlein();
-  if(screen==="controle") return baseControle();
+  // caché : if(screen==="mount") return baseMount();
+  // caché : if(screen==="panne") return basePanne();
+  // caché : if(screen==="plein") return basePlein();
+  // caché : if(screen==="controle") return baseControle();
   const attendues=S.attendues.length;
   const enStock=S.stock.filter(s=>s.qte>0).length;
   const mine=[...S.demandes].sort(newest).slice(0,25);
   return `<div class="base">
    <div class="bigs">
-    <button class="big k" data-act="go" data-s="controle">${ICON.shield}<span><b>Contrôle avant départ</b><small>${(()=>{const n=new Set(S.controles.filter(c=>duJour(c.created_at)).map(c=>c.vehicule_id)).size,t=S.vehicules.filter(v=>v.statut!=="Hors parc").length;return n>=t?"Tous les camions sont contrôlés aujourd'hui":`${n} sur ${t} camions contrôlés aujourd'hui`})()}</small></span></button>
     <button class="big o" data-act="go" data-s="new">${ICON.plus}<span><b>Nouvelle demande</b><small>Le mécanicien a besoin d'une pièce</small></span></button>
     <button class="big b" data-act="go" data-s="recv">${ICON.box}<span><b>Réception livraison</b><small>${attendues?`${attendues} commande(s) attendue(s)`:"Aucune commande attendue"}</small></span></button>
-    <button class="big g" data-act="go" data-s="mount">${ICON.wrench}<span><b>Pièce montée</b><small>${enStock?`${enStock} pièce(s) en stock à la base`:"Stock de la base vide"}</small></span></button>
-    <button class="big y" data-act="go" data-s="plein">${ICON.fuel}<span><b>Plein de carburant</b><small>Noter les litres avec le ticket</small></span></button>
-    <button class="big r" data-act="go" data-s="panne">${ICON.alert}<span><b>Déclarer une panne</b><small>${pannesOuvertes().length?`${pannesOuvertes().length} panne(s) en cours`:"Aucune panne en cours"}</small></span></button>
    </div>
-   ${pannesOuvertes().length?`<h3>Pannes en cours</h3>${pannesOuvertes().map(panneCard).join("")}`:""}
    <h3>Demandes envoyées</h3>
    ${mine.length?mine.map(d=>`<div class="card">${thumb(d.photo,"Demande")}<div class="grow"><div class="row"><span class="ref">${esc(d.num)}</span>${chip("demande",d.statut)}${d.urgent?'<span class="chip bad">Urgent</span>':""}</div><div>${esc(d.piece||"Voir la photo")} × ${d.qte} · ${esc(vName(d.vehicule_id))}</div><div class="sub">${dt(d.created_at)}${d.motif?` · ${esc(d.motif)}`:""}</div></div></div>`).join(""):'<div class="empty">Aucune demande pour l\'instant. Appuyez sur « Nouvelle demande » pour commencer.</div>'}
   </div>`;
@@ -1135,12 +1133,6 @@ function cartesBord(){
   return [
     {k:"depenses",t:"Dépenses du mois",v:fmt(somme(bcM)),u:"XAF",s:`${bcM.length} bon(s) · mois dernier ${fmt(somme(bcP))} XAF`},
     {k:"attente",t:"Bons à valider",v:av.length,s:plusVieux?"le plus ancien "+depuis(plusVieux.created_at):"rien en attente",c:plusVieux?attenteCls(plusVieux.created_at,urgentBc(plusVieux)):"ok"},
-    {k:"panne",t:"Camions en panne",v:S.vehicules.filter(v=>v.statut==="En panne").length,s:`sur ${S.vehicules.filter(v=>v.statut!=="Hors parc").length} camions`,c:S.vehicules.some(v=>v.statut==="En panne")?"bad":"ok"},
-    {k:"entretien",t:"Entretiens à faire",v:entretiensAFaire().length,s:`${entretiensAFaire().filter(e=>entEtat(e).c==="bad").length} en retard`,c:entretiensAFaire().some(e=>entEtat(e).c==="bad")?"bad":entretiensAFaire().length?"warn":"ok"},
-    {k:"papiers",t:"Papiers à renouveler",v:papiersAlerte().length,s:`${papiersAlerte().filter(p=>papierEtat(p).c==="bad").length} expiré(s)`,c:papiersAlerte().some(p=>papierEtat(p).c==="bad")?"bad":papiersAlerte().length?"warn":"ok"},
-    {k:"carburant",t:"Carburant du mois",v:fmt(S.carburant.filter(c=>ts(c.fait_le)>=m0).reduce((s,c)=>s+(+c.litres||0),0)),u:"L",s:`${S.vehicules.filter(v=>conso4j(v.id)>LIMITE_4J).length} camion(s) au-dessus de ${LIMITE_4J} L / 4 jours`,c:S.vehicules.some(v=>conso4j(v.id)>LIMITE_4J)?"bad":""},
-    {k:"ruptures",t:"Pièces sous le minimum",v:S.stock.filter(s=>["bad","warn"].includes(niveau(s))).length,s:"voir la commande suggérée",c:S.stock.some(s=>niveau(s)==="bad")?"bad":S.stock.some(s=>niveau(s)==="warn")?"warn":"ok"},
-    {k:"hse",t:"Jours sans accident",v:joursSansAccident()??"—",s:`${new Set(S.controles.filter(c=>duJour(c.created_at)).map(c=>c.vehicule_id)).size} contrôle(s) avant départ aujourd'hui`,c:joursSansAccident()!==null&&joursSansAccident()<7?"bad":""},
     {k:"demandes",t:"Demandes en cours",v:S.demandes.filter(d=>!["Montée","Refusée"].includes(d.statut)).length,s:`${S.demandes.filter(d=>d.statut==="Nouvelle").length} nouvelle(s) à traiter`},
     {k:"livraisons",t:"Livraisons attendues",v:S.commandes.filter(b=>["Validé","Reçu partiel"].includes(b.statut)).length,s:"bons validés pas encore reçus"},
     {k:"dettes",t:"À payer aux fournisseurs",v:fmt(conf.reduce((s,f)=>s+(+f.montant||0),0)),u:"XAF",s:`${conf.length} facture(s) conforme(s)`},
@@ -1160,16 +1152,13 @@ function vBord(){
   const C=cartesBord(), R=classements();
   const phrase=[];
   const av=C.find(c=>c.k==="attente"); if(av.v) phrase.push(`${av.v} bon(s) attendent la validation du DG (${av.s}).`);
-  const pn=C.find(c=>c.k==="panne"); if(pn.v) phrase.push(`${pn.v} camion(s) en panne.`);
-  if(R.camion[0]) phrase.push(`Le camion qui a coûté le plus : ${R.camion[0][0]} (${xaf(R.camion[0][1])}).`);
+  const bl=C.find(c=>c.k==="bloquees"); if(bl.v) phrase.push(`${bl.v} facture(s) bloquée(s) à vérifier.`);
+  const dt_=C.find(c=>c.k==="dettes"); if(+String(dt_.s).split(" ")[0]) phrase.push(`${dt_.s} : ${dt_.v} XAF à payer.`);
   return `<div class="stack">
-   <div class="panel"><div class="db"><div class="row"><b class="grow">En bref</b><button class="btn sm ok" data-act="rap-soir">Rapport du soir (WhatsApp)</button></div>${phrase.map(p=>`<div>${esc(p)}</div>`).join("")||"<div>Rien de spécial aujourd'hui.</div>"}</div></div>
+   <div class="panel"><div class="db"><div class="row"><b class="grow">En bref</b></div>${phrase.map(p=>`<div>${esc(p)}</div>`).join("")||"<div>Rien de spécial aujourd'hui.</div>"}</div></div>
    <div class="kpis">${C.map(c=>`<button class="kpi kbtn${c.c?" k-"+c.c:""}" data-act="zoom" data-k="${c.k}"><span>${esc(c.t)}</span><b>${c.v}${c.u?` <small>${c.u}</small>`:""}</b><em>${esc(c.s)}</em></button>`).join("")}</div>
-   <div class="grid3">
-    <div class="panel"><div class="phead"><h2 class="grow">Camions qui coûtent le plus</h2></div><div class="db">${barres(R.camion,xaf)}</div></div>
-    <div class="panel"><div class="phead"><h2 class="grow">Pièces qui cassent le plus</h2></div><div class="db">${barres(R.piece,v=>v+" montée(s)")}</div></div>
-    <div class="panel"><div class="phead"><h2 class="grow">Fournisseurs les plus payés</h2></div><div class="db">${barres(R.fourn,xaf)}</div></div>
-   </div></div>`;
+   <div class="panel"><div class="phead"><h2 class="grow">Fournisseurs les plus payés</h2></div><div class="db">${barres(R.fourn,xaf)}</div></div>
+</div>`;
 }
 function vZoom(){
   const C=cartesBord().find(c=>c.k===zoom); if(!C){zoom=null;return vBord()}
